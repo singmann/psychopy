@@ -906,11 +906,12 @@ class Window:
         config = GL.Config(depth_size=8, double_buffer=True,
             stencil_size=stencil_size, stereo=self.stereo) #options that the user might want
         allScrs = pyglet.window.get_platform().get_default_display().get_screens()
-        if len(allScrs)>self.screen:
+        if len(allScrs)<int(self.screen)+1:  # Screen (from Exp Settings) is 1-indexed, so the second screen is Screen 1
+            logging.warn("Requested an unavailable screen number - using first available.")
+            thisScreen = allScrs[0]
+        else:
             thisScreen = allScrs[self.screen]
             logging.info('configured pyglet screen %i' %self.screen)
-        else:
-            logging.error("Requested an unavailable screen number")
         #if fullscreen check screen size
         if self._isFullScr:
             self._checkMatchingSizes(self.size,[thisScreen.width, thisScreen.height])
@@ -6313,7 +6314,7 @@ class RatingScale:
                 markerColor = customMarker.color
                 if not hasattr(self.marker, 'name'):
                     self.marker.name = 'customMarker'
-        elif self.markerStyle == 'triangle': # and sys.platform in ['linux2', 'darwin']):
+        elif self.markerStyle == 'triangle':
             vertices = [[-1 * tickSize * self.displaySizeFactor * 1.8, tickSize * self.displaySizeFactor * 3],
                     [ tickSize * self.displaySizeFactor * 1.8, tickSize * self.displaySizeFactor * 3], [0, -0.005]]
             if markerColor == None:
@@ -6471,7 +6472,7 @@ class RatingScale:
             [acceptBoxright-3*delta2,acceptBoxbot+delta2], [acceptBoxright-delta,acceptBoxbot],
             [acceptBoxleft+delta,acceptBoxbot], [acceptBoxleft+3*delta2,acceptBoxbot+delta2],
             [acceptBoxleft+delta2,acceptBoxbot+3*delta2], [acceptBoxleft,acceptBoxbot+delta] ]
-        if sys.platform not in ['linux2']:
+        if not sys.platform.startswith('linux'):
             self.acceptBox = ShapeStim(win=self.win, vertices=acceptBoxVertices,
                             fillColor=self.acceptFillColor, lineColor=self.acceptLineColor,
                             name=self.name+'.accept')
