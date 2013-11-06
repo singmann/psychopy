@@ -1,5 +1,5 @@
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 import wx
@@ -8,11 +8,13 @@ from wx.lib.expando import ExpandoTextCtrl, EVT_ETC_LAYOUT_NEEDED
 import wx.aui, wx.stc
 import sys, os, glob, copy, shutil, traceback
 import keyword
-import py_compile, codecs
+import codecs
+import re
 import numpy
 import experiment, components
 from psychopy.app import stdOutRich, dialogs
-from psychopy import data, logging, misc, gui
+from psychopy import data, logging, gui
+from psychopy.tools.filetools import mergeFolder
 from tempfile import mkdtemp # to check code syntax
 import cPickle
 from psychopy.app.builder.experiment import _valid_var_re, _nonalphanumeric_re
@@ -21,6 +23,7 @@ from psychopy.constants import *
 
 canvasColor=[200,200,200]#in prefs? ;-)
 routineTimeColor=wx.Color(50,100,200, 200)
+staticTimeColor=wx.Color(200,50,50, 100)
 nonSlipFill=wx.Color(150,200,150, 255)
 nonSlipEdge=wx.Color(0,100,0, 255)
 relTimeFill=wx.Color(200,150,150, 255)
@@ -29,6 +32,10 @@ routineFlowColor=wx.Color(200,150,150, 255)
 darkgrey=wx.Color(65,65,65, 255)
 white=wx.Color(255,255,255, 255)
 darkblue=wx.Color(30,30,150, 255)
+codeSyntaxOkay=wx.Color(220,250,220, 255)  # light green
+
+# regular expression to check for unescaped '$' to indicate code:
+_unescapedDollarSign_re = re.compile(r"^\$|[^\\]\$")
 
 class FileDropTarget(wx.FileDropTarget):
     """On Mac simply setting a handler for the EVT_DROP_FILES isn't enough.
@@ -409,7 +416,7 @@ class FlowPanel(wx.ScrolledWindow):
         x = self.getNearestGapPoint(0)
         self.drawEntryPoints([x])
     def setLoopPoint2(self, evt=None):
-        """We'ce got the location of the first point, waiting to get the second
+        """We've got the location of the first point, waiting to get the second
         """
         self.mode='loopPoint2'
         self.frame.SetStatusText('Click the other end for the loop')
@@ -450,7 +457,7 @@ class FlowPanel(wx.ScrolledWindow):
         r = len(nsu) // c  # number of rows
         print '_' * c * m
         for i in range(r):
-            print ' '+''.join([nsu[i+j*r] for j in range(c)])  # typially to coder output
+            print ' '+''.join([nsu[i+j*r] for j in range(c)])  # typically to coder output
         collisions = self.frame.exp.namespace.getCollisions()
         if collisions:
             print "*** collisions ***: %s" % str(collisions)
@@ -478,7 +485,7 @@ class FlowPanel(wx.ScrolledWindow):
             prevLoop=loop
             if loopDlg.params['loopType'].val=='staircase':
                 loop= loopDlg.stairHandler
-            elif loopDlg.params['loopType'].val=='interleaved stairs':
+            elif loopDlg.params['loopType'].val=='interleaved staircases':
                 loop= loopDlg.multiStairHandler
             else:
                 loop=loopDlg.trialHandler #['random','sequential', 'fullRandom', ]
@@ -486,8 +493,8 @@ class FlowPanel(wx.ScrolledWindow):
             if loop.getType()!=prevLoop.getType():
                 #get indices for start and stop points of prev loop
                 flow = self.frame.exp.flow
-                startII = flow.index(prevLoop.initiator)#find the index of the initator
-                endII = flow.index(prevLoop.terminator)-1 #minus one because initator will have been deleted
+                startII = flow.index(prevLoop.initiator) #find the index of the initiator
+                endII = flow.index(prevLoop.terminator)-1 #minus one because initiator will have been deleted
                 #remove old loop completely
                 flow.removeComponent(prevLoop)
                 #finally insert the new loop
@@ -596,7 +603,7 @@ class FlowPanel(wx.ScrolledWindow):
         if op=='rename':
             print 'rename is not implemented yet'
             #if component is a loop: DlgLoopProperties
-            #elif comonent is a routine: DlgRoutineProperties
+            #elif component is a routine: DlgRoutineProperties
         self.draw()
         self._menuComponentID=None
     def removeComponent(self, component, compID):
@@ -628,9 +635,12 @@ class FlowPanel(wx.ScrolledWindow):
         elif 'conditionsFile' in component.params.keys():
             conditionsFile = component.params['conditionsFile'].val
             if conditionsFile and conditionsFile not in ['None','']:
-                _, fieldNames = data.importConditions(conditionsFile, returnFieldNames=True)
-                for fname in fieldNames:
-                    self.frame.exp.namespace.remove(fname)
+                try:
+                    _, fieldNames = data.importConditions(conditionsFile, returnFieldNames=True)
+                    for fname in fieldNames:
+                        self.frame.exp.namespace.remove(fname)
+                except:
+                    logging.debug("Condtions file %s couldn't be found so names not removed from namespace")
             self.frame.exp.namespace.remove(component.params['name'].val)
         #perform the actual removal
         flow.removeComponent(component, id=compID)
@@ -839,6 +849,7 @@ class FlowPanel(wx.ScrolledWindow):
         else:
             dc.DrawPolygon([[size,0],[0,size],[-size,0]], pos[0],pos[1]-4*size)#points down
         dc.SetIdBounds(tmpId,wx.Rect(pos[0]-size,pos[1]-size,2*size,2*size))
+
     def drawFlowRoutine(self,dc,routine,id,pos=[0,0], draw=True):
         """Draw a box to show a routine on the timeline
         draw=False is for a dry-run, esp to compute and return size information without drawing or setting a pdc ID
@@ -861,7 +872,7 @@ class FlowPanel(wx.ScrolledWindow):
             fontSizeDelta = (8,4,0)[self.appData['flowSize']]
             font.SetPointSize(1000/self.dpi-fontSizeDelta)
 
-        maxTime,nonSlip=routine.getMaxTime()
+        maxTime, nonSlip, onlyStaticComps = routine.getMaxTime()
         if nonSlip:
             rgbFill=nonSlipFill
             rgbEdge=nonSlipEdge
@@ -1090,7 +1101,7 @@ class RoutineCanvas(wx.ScrolledWindow):
         if op=='edit':
             self.editComponentProperties(component=component)
         elif op=='remove':
-            r.remove(component)
+            r.removeComponent(component)
             self.frame.addToUndoStack("REMOVE `%s` from Routine" %(component.params['name'].val))
             self.frame.exp.namespace.remove(component.params['name'].val)
         elif op.startswith('move'):
@@ -1145,26 +1156,47 @@ class RoutineCanvas(wx.ScrolledWindow):
                 w = self.GetFullTextExtent(name)[0]
         self.timeXpos = w+(50,50,90)[self.drawSize]
 
-        #draw timeline at bottom of page
-        yPosBottom = self.yPosTop+len(self.routine)*self.componentStep
-        self.drawTimeGrid(self.pdc,self.yPosTop,yPosBottom)
-        yPos = self.yPosTop
-
+        #separate components according to whether they are drawn in separate row
+        rowComponents = []
+        staticCompons = []
         for n, component in enumerate(self.routine):
+            if component.type == 'Static':
+                staticCompons.append(component)
+            else:
+                rowComponents.append(component)
+
+        # draw static, time grid, normal (row) comp:
+        yPos = self.yPosTop
+        yPosBottom = yPos + len(rowComponents) * self.componentStep
+        # draw any Static Components first (below the grid)
+        for component in staticCompons:
+            bottom = max(yPosBottom,self.GetSize()[1])
+            self.drawStatic(self.pdc, component, yPos, bottom)
+        self.drawTimeGrid(self.pdc,yPos,yPosBottom)
+        #normal components, one per row
+        for component in rowComponents:
             self.drawComponent(self.pdc, component, yPos)
             yPos+=self.componentStep
 
         self.SetVirtualSize((self.maxWidth, yPos+50))#the 50 allows space for labels below the time axis
         self.pdc.EndDrawing()
         self.Refresh()#refresh the visible window after drawing (using OnPaint)
-
+    def getMaxTime(self):
+        """Return the max time to be drawn in the window
+        """
+        maxTime, nonSlip, onlyStaticComps = self.routine.getMaxTime()
+        if onlyStaticComps:
+            maxTime= maxTime+0.5
+        return maxTime
     def drawTimeGrid(self, dc, yPosTop, yPosBottom, labelAbove=True):
         """Draws the grid of lines and labels the time axes
         """
-        tMax=self.routine.getMaxTime()[0]*1.1
+        tMax=self.getMaxTime()*1.1
         xScale = self.getSecsPerPixel()
         xSt=self.timeXposStart
         xEnd=self.timeXposEnd
+
+        #dc.SetId(wx.NewId())
         dc.SetPen(wx.Pen(wx.Color(0, 0, 0, 150)))
         #draw horizontal lines on top and bottom
         dc.DrawLine(x1=xSt,y1=yPosTop,
@@ -1187,14 +1219,51 @@ class RoutineCanvas(wx.ScrolledWindow):
         # or draw bottom labels only if scrolling is turned on, virtual size > available size?
         if yPosBottom>300:#if bottom of grid is far away then draw labels here too
             dc.DrawText('t (sec)',xEnd+5,yPosBottom-self.GetFullTextExtent('t')[1]/2.0)#y is y-half height of text
+
     def setFontSize(self, size, dc):
         font = self.GetFont()
         font.SetPointSize(size)
         dc.SetFont(font)
+    def drawStatic(self, dc, component, yPosTop, yPosBottom):
+        """draw a static component box"""
+        #set an id for the region of this component (so it can act as a button)
+        ##see if we created this already
+        id=None
+        for key in self.componentFromID.keys():
+            if self.componentFromID[key]==component:
+                id=key
+        if not id: #then create one and add to the dict
+            id = wx.NewId()
+            self.componentFromID[id]=component
+        dc.SetId(id)
+        #deduce start and stop times if possible
+        startTime, duration, nonSlipSafe = component.getStartAndDuration()
+        #draw entries on timeline (if they have some time definition)
+        if startTime!=None and duration!=None:#then we can draw a sensible time bar!
+            #calculate rectangle for component
+            xScale = self.getSecsPerPixel()
+            dc.SetPen(wx.Pen(wx.Color(200, 100, 100, 0), style=wx.TRANSPARENT))
+            dc.SetBrush(wx.Brush(staticTimeColor))
+            xSt = self.timeXposStart + startTime/xScale
+            w = (duration)/xScale + 1  # +1 to compensate for border alpha=0 in dc.SetPen
+            if w>10000: w=10000#limit width to 10000 pixels!
+            if w<2: w=2#make sure at least one pixel shows
+            h = yPosBottom-yPosTop
+            # name label, position:
+            name = component.params['name'].val  # "ISI"
+            nameW, nameH = self.GetFullTextExtent(name)[0:2]
+            x = xSt+w/2
+            staticLabelTop = (0, 50, 60)[self.drawSize]
+            y = staticLabelTop - nameH * 3
+            fullRect = wx.Rect(x-20,y,nameW, nameH)
+            #draw the rectangle, draw text on top:
+            dc.DrawRectangle(xSt, yPosTop-nameH*4, w, h+nameH*5)
+            dc.DrawText(name, x-nameW/2, y)
+            fullRect.Union(wx.Rect(xSt, yPosTop, w, h))#update bounds to include time bar
+            dc.SetIdBounds(id,fullRect)
     def drawComponent(self, dc, component, yPos):
         """Draw the timing of one component on the timeline"""
-
-        #set an id for the region of this comonent (so it can act as a button)
+        #set an id for the region of this component (so it can act as a button)
         ##see if we created this already
         id=None
         for key in self.componentFromID.keys():
@@ -1266,7 +1335,7 @@ class RoutineCanvas(wx.ScrolledWindow):
             self.frame.addToUndoStack("EDIT `%s`" %component.params['name'].val)
 
     def getSecsPerPixel(self):
-        return float(self.routine.getMaxTime()[0])/(self.timeXposEnd-self.timeXposStart)
+        return float(self.getMaxTime())/(self.timeXposEnd-self.timeXposStart)
 
 class RoutinesNotebook(wx.aui.AuiNotebook):
     """A notebook that stores one or more routines
@@ -1363,7 +1432,11 @@ class ComponentsPanel(scrolledpanel.ScrolledPanel):
         self.frame=frame
         self.app=frame.app
         self.dpi=self.app.dpi
-        scrolledpanel.ScrolledPanel.__init__(self,frame,id,size=(100,10*self.dpi))
+        if self.app.prefs.app['largeIcons']:
+            panelWidth = 3*48+40
+        else:
+            panelWidth = 3*24+40
+        scrolledpanel.ScrolledPanel.__init__(self,frame,id,size=(panelWidth,10*self.dpi))
         self.sizer=wx.BoxSizer(wx.VERTICAL)
         self.components=components.getAllComponents()
         self.components=experiment.getAllComponents(self.app.prefs.builder['componentsFolders'])
@@ -1391,14 +1464,14 @@ class ComponentsPanel(scrolledpanel.ScrolledPanel):
                 self.panels[categ]=wx.FlexGridSizer(cols=2)
             self.sizer.Add(sectionBtn, flag=wx.EXPAND)
             self.sizerList.append(sectionBtn)
-            self.sizer.Add(self.panels[categ])
+            self.sizer.Add(self.panels[categ], flag=wx.ALIGN_CENTER)
             self.sizerList.append(self.panels[categ])
         self.makeComponentButtons()
         self._rightClicked=None
         #start all except for Favorites collapsed
         for section in categories[1:]:
             self.toggleSection(self.panels[section])
-        
+
         self.Bind(wx.EVT_SIZE, self.on_resize)
         self.SetSizer(self.sizer)
         self.SetAutoLayout(True)
@@ -1410,8 +1483,8 @@ class ComponentsPanel(scrolledpanel.ScrolledPanel):
             cols = self.GetClientSize()[0] / 58
         else:
             cols = self.GetClientSize()[0] / 34
-        for panel in self.panels.values():
-            panel.SetCols(max(1, cols))
+        for category in self.panels.values():
+            category.SetCols(max(1, cols))
 
     def makeFavoriteButtons(self):
         #add a copy of each favorite to that panel first
@@ -1585,7 +1658,7 @@ class FavoriteComponents(object):
                 self.currentLevels[comp]=self.neutral
 
     def makeFavorite(self, compName):
-        """Set the value of this component to an arbitraty high value (10000)
+        """Set the value of this component to an arbitrary high value (10000)
         """
         self.currentLevels[compName] = 10000
     def promoteComponent(self, compName, value=1):
@@ -1614,7 +1687,8 @@ class FavoriteComponents(object):
         return favorites
 
 class ParamCtrls:
-    def __init__(self, dlg, label, param, browse=False, noCtrls=False, advanced=False, appPrefs=None):
+    def __init__(self, dlg, label, param,
+                 browse=False, noCtrls=False, advanced=False, appPrefs=None):
         """Create a set of ctrls for a particular Component Parameter, to be
         used in Component Properties dialogs. These need to be positioned
         by the calling dlg.
@@ -1639,6 +1713,19 @@ class ParamCtrls:
         self.valueWidth = self.dpi*3.5
         if advanced: parent=self.dlg.advPanel.GetPane()
         else: parent=self.dlg
+        #try to find the experiment
+        self.exp=None
+        tryForExp = self.dlg
+        while self.exp==None:
+            if hasattr(tryForExp,'frame'):
+                self.exp=tryForExp.frame.exp
+            else:
+                try:
+                    tryForExp=tryForExp.parent#try going up a level
+                except:
+                    print dir(tryForExp)
+                    tryForExp.parent
+
         #param has the fields:
         #val, valType, allowedVals=[],allowedTypes=[], hint="", updates=None, allowedUpdates=None
         # we need the following
@@ -1649,7 +1736,7 @@ class ParamCtrls:
         if type(param.val)==numpy.ndarray:
             initial=param.val.tolist() #convert numpy arrays to lists
         labelLength = wx.Size(self.dpi*2,self.dpi*2/3)#was 8*until v0.91.4
-        if param.valType == 'code' and label not in ['name', 'Experiment info']:
+        if param.valType == 'code' and label.lower() not in ['name', 'experiment info']:
             displayLabel = label+' $'
         else:
             displayLabel = label
@@ -1674,11 +1761,10 @@ class ParamCtrls:
             #for expInfo convert from a string to the list-of-dicts
             val = self.expInfoToListWidget(param.val)
             self.valueCtrl = dialogs.ListWidget(parent, val, order=['Field','Default'])
-        elif label in components.code.codeParamNames[:]:
+        elif param.valType=='extendedCode':
             self.valueCtrl = CodeBox(parent,-1,
                  pos=wx.DefaultPosition, size=wx.Size(100,100),#set the viewer to be small, then it will increase with wx.aui control
                  style=0, prefs=appPrefs)
-
             if len(param.val):
                 self.valueCtrl.AddText(unicode(param.val))
             #code input fields one day change these to wx.stc fields?
@@ -1718,7 +1804,11 @@ class ParamCtrls:
         if param.allowedUpdates==None or len(param.allowedUpdates)==0:
             pass
         else:
-            self.updateCtrl = wx.Choice(parent, choices=param.allowedUpdates)
+            updates = copy.copy(param.allowedUpdates)
+            for routineName, routine in self.exp.routines.items():
+                for static in routine.getStatics():
+                    updates.append("set during: %s.%s" %(routineName, static.params['name']))
+            self.updateCtrl = wx.Choice(parent, choices=updates)
             self.updateCtrl.SetStringSelection(param.updates)
         if param.allowedUpdates!=None and len(param.allowedUpdates)==1:
             self.updateCtrl.Disable()#visible but can't be changed
@@ -1809,9 +1899,9 @@ class _BaseParamsDlg(wx.Dialog):
     def __init__(self,frame,title,params,order,
             helpUrl=None, suppressTitles=True,
             showAdvanced=False,
-            pos=wx.DefaultPosition, size=wx.DefaultSize,
+            size=wx.DefaultSize,
             style=wx.DEFAULT_DIALOG_STYLE|wx.DIALOG_NO_PARENT|wx.TAB_TRAVERSAL,editing=False):
-        wx.Dialog.__init__(self, frame,-1,title,pos,size,style)
+        wx.Dialog.__init__(self, frame,-1,title,size=size,style=style)
         self.frame=frame
         self.app=frame.app
         self.dpi=self.app.dpi
@@ -1837,9 +1927,18 @@ class _BaseParamsDlg(wx.Dialog):
         types=dict([])
         self.useUpdates=False#does the dlg need an 'updates' row (do any params use it?)
         self.timeParams=['startType','startVal','stopType','stopVal']
-        self.codeParamNames = components.code.codeParamNames[:] # want a copy
         self.codeFieldNameFromID = {}
         self.codeIDFromFieldName = {}
+
+        # for switching font to signal code:
+        self.codeFaceName = 'Courier New'  # get another monospace if not available
+        # need font size for STCs:
+        if wx.Platform == '__WXMSW__':
+            self.faceSize = 10
+        elif wx.Platform == '__WXMAC__':
+            self.faceSize = 14
+        else:
+            self.faceSize = 12
 
         #create a header row of titles
         if not suppressTitles:
@@ -1868,7 +1967,7 @@ class _BaseParamsDlg(wx.Dialog):
             remaining.remove('name')
             if 'name' in self.order:
                 self.order.remove('name')
-#            self.currRow+=1
+            #self.currRow+=1
         #add start/stop info
         if 'startType' in remaining:
             remaining = self.addStartStopCtrls(remaining=remaining)
@@ -1879,17 +1978,17 @@ class _BaseParamsDlg(wx.Dialog):
         #loop through the prescribed order (the most important?)
         for fieldName in self.order:
             if fieldName in self.advParams:continue#skip advanced params
-            self.addParam(fieldName)
+            self.addParam(fieldName, valType=self.params[fieldName].valType)
             remaining.remove(fieldName)
         #add any params that weren't specified in the order
         for fieldName in remaining:
             if fieldName not in self.advParams:
-                self.addParam(fieldName)
+                self.addParam(fieldName, valType=self.params[fieldName].valType)
         #add advanced params if needed
         if len(self.advParams)>0:
             self.addAdvancedTab()
             for fieldName in self.advParams:
-                self.addParam(fieldName, advanced=True)
+                self.addParam(fieldName, advanced=True, valType=self.params[fieldName].valType)
 
     def addStartStopCtrls(self,remaining):
         """Add controls for startType, startVal, stopType, stopVal
@@ -1966,9 +2065,17 @@ class _BaseParamsDlg(wx.Dialog):
         remaining.remove('stopType')
         remaining.remove('stopVal')
         remaining.remove('durationEstim')
+
+        # use monospace font to signal code:
+        self.defaultFontFaceName = self.startValCtrl.GetFont().GetFaceName()
+        self.checkCodeWanted(self.startValCtrl)
+        self.startValCtrl.Bind(wx.EVT_KEY_UP, self.checkCodeWanted)
+        self.checkCodeWanted(self.stopValCtrl)
+        self.stopValCtrl.Bind(wx.EVT_KEY_UP, self.checkCodeWanted)
+
         return remaining
 
-    def addParam(self,fieldName, advanced=False):
+    def addParam(self,fieldName, advanced=False, valType=None):
         """Add a parameter to the basic sizer
         """
         if advanced:
@@ -2000,11 +2107,31 @@ class _BaseParamsDlg(wx.Dialog):
             #self.Bind(EVT_ETC_LAYOUT_NEEDED, self.onNewTextSize, ctrls.valueCtrl)
         elif fieldName in ['color', 'Color']:
             ctrls.valueCtrl.Bind(wx.EVT_RIGHT_DOWN, self.launchColorPicker)
-        elif fieldName in self.codeParamNames:
+        elif valType == 'extendedCode':
             sizer.AddGrowableRow(currRow)#doesn't seem to work though
             ctrls.valueCtrl.Bind(wx.EVT_KEY_DOWN, self.onTextEventCode)
         elif fieldName=='Monitor':
             ctrls.valueCtrl.Bind(wx.EVT_RIGHT_DOWN, self.openMonitorCenter)
+
+        # use monospace font to signal code:
+        if fieldName != 'name' and hasattr(ctrls.valueCtrl, 'GetFont'):
+            font = ctrls.valueCtrl.GetFont()
+            self.defaultFontFaceName = font.GetFaceName()
+            _font = ctrls.valueCtrl.GetFont()
+            try:
+                _font.SetFaceName(self.codeFaceName)  # see what happens
+            except:
+                self.codeFaceName = self.app.prefs.coder['codeFont']
+            if self.params[fieldName].valType == 'code':
+                font.SetFaceName(self.codeFaceName)
+                ctrls.valueCtrl.SetFont(font)
+            elif self.params[fieldName].valType == 'str':
+                ctrls.valueCtrl.Bind(wx.EVT_KEY_UP, self.checkCodeWanted)
+                try:
+                    self.checkCodeWanted(ctrls.valueCtrl)
+                except:
+                    pass
+
         #increment row number
         if advanced: self.advCurrRow+=1
         else:self.currRow+=1
@@ -2075,7 +2202,7 @@ class _BaseParamsDlg(wx.Dialog):
             helpBtn = wx.Button(self, wx.ID_HELP)
             helpBtn.SetToolTip(wx.ToolTip("Go to online help about this component"))
             helpBtn.Bind(wx.EVT_BUTTON, self.onHelp)
-            buttons.Add(helpBtn, wx.ALIGN_LEFT|wx.ALL,border=3)
+            buttons.Add(helpBtn, 0, wx.ALIGN_LEFT|wx.ALL,border=3)
             buttons.AddSpacer(12)
         self.OKbtn = wx.Button(self, wx.ID_OK, " OK ")
         # intercept OK button if a loop dialog, in case file name was edited:
@@ -2097,6 +2224,9 @@ class _BaseParamsDlg(wx.Dialog):
         self.border = wx.BoxSizer(wx.VERTICAL)
         self.border.Add(self.mainSizer, flag=wx.ALL|wx.EXPAND, border=8)
         self.SetSizerAndFit(self.border)
+        #move the position to be v near the top of screen and to the right of the left-most edge of builder
+        builderPos = self.frame.GetPosition()
+        self.SetPosition((builderPos[0]+200,20))
 
         #do show and process return
         retVal = self.ShowModal()
@@ -2118,38 +2248,25 @@ class _BaseParamsDlg(wx.Dialog):
             # ... but skip the check if end of line is colon ord(58)=':'
             self._setNameColor(self._testCompile(codeBox))
         event.Skip()
-    def _testCompile(self, ctrl):
-        """checks code.val for legal python syntax, sets field bg color, returns status
+    def _testCompile(self, ctrl, mode='exec'):
+        """checks whether code.val is legal python syntax, returns error status
 
-        method: writes code to a file, try to py_compile it. not intended for
-        high-freq repeated checking, ok for CPU but hits the disk every time.
+        mode = 'exec' (statement or expr) or 'eval' (expr only)
         """
-        # better to use a StringIO.StringIO() than a tmp file, but couldnt work it out
-        # definitely don't want eval() or exec()
-        tmpDir = mkdtemp(prefix='psychopy-check-code-syntax')
-        tmpFile = os.path.join(tmpDir, 'tmp')
         if hasattr(ctrl,'GetText'):
             val = ctrl.GetText()
-        elif hasattr(ctrl, 'GetValue'): #e.g. TextCtrl
+        elif hasattr(ctrl, 'GetValue'):  #e.g. TextCtrl
             val = ctrl.GetValue()
         else:
             raise ValueError, 'Unknown type of ctrl in _testCompile: %s' %(type(ctrl))
-        f = codecs.open(tmpFile, 'w', 'utf-8')
-        f.write(val)
-        f.close()
-        #f=StringIO.StringIO(self.params[param].val) # tried to avoid a tmp file, no go
         try:
-            py_compile.compile(tmpFile, doraise=True)
-            syntaxCheck = True # syntax fine
+            compile(val, '', mode)
+            syntaxOk = True
             ctrl.setStatus('OK')
-        except: # hopefully SyntaxError, but can't check for it; checking messes with things
-#            ctrl.SetBackgroundColour(wx.Color(250,210,210, 255)) # red, bad
+        except SyntaxError:
             ctrl.setStatus('error')
-            syntaxCheck = False # syntax error
-        # clean up tmp files:
-        shutil.rmtree(tmpDir, ignore_errors=True)
-
-        return syntaxCheck
+            syntaxOk = False
+        return syntaxOk
 
     def checkCodeSyntax(self, event=None):
         """Checks syntax for whole code component by code box, sets box bg-color.
@@ -2159,21 +2276,52 @@ class _BaseParamsDlg(wx.Dialog):
         elif hasattr(event,'GetText'):
             codeBox = event #we were given the control itself, not an event
         else:
-            print 'checkCodeSyntax received unexpected event object (%s). Should be a wx.Event or a CodeBox' %type(event)
-            logging.error('checkCodeSyntax received unexpected event object (%s). Should be a wx.Event or a CodeBox' %type(event))
+            raise ValueError('checkCodeSyntax received unexpected event object (%s). Should be a wx.Event or a CodeBox' %type(event))
         text = codeBox.GetText()
         if not text.strip(): # if basically empty
-            codeBox.SetBackgroundColour(wx.Color(255,255,255, 255)) # white
+            codeBox.SetBackgroundColour(white)
             return # skip test
         goodSyntax = self._testCompile(codeBox) # test syntax
         self._setNameColor(goodSyntax)
     def _setNameColor(self, goodSyntax):
         if goodSyntax:
-            self.paramCtrls['name'].valueCtrl.SetBackgroundColour(wx.Color(220,250,220, 255)) # name green, good
+            self.paramCtrls['name'].valueCtrl.SetBackgroundColour(codeSyntaxOkay)
             self.nameOKlabel.SetLabel("")
         else:
-            self.paramCtrls['name'].valueCtrl.SetBackgroundColour(wx.Color(255,255,255, 255)) # name white
+            self.paramCtrls['name'].valueCtrl.SetBackgroundColour(white)
             self.nameOKlabel.SetLabel('syntax error')
+
+    def checkCodeWanted(self, event=None):
+        """check whether a $ is present (if so, set the display font)
+        """
+        if hasattr(event, 'GetEventObject'):
+            strBox = event.GetEventObject()
+        elif hasattr(event, 'GetValue'):
+            strBox = event  # we were given the control itself, not an event
+        else:
+            raise ValueError('checkCodeWanted received unexpected event object (%s).')
+        try:
+            val = strBox.GetValue()
+            stc = False
+        except:
+            val = strBox.GetText()
+            stc = True  # might be StyledTextCtrl
+
+        # set display font based on presence of $ (without \$)?
+        font = strBox.GetFont()
+        if _unescapedDollarSign_re.search(val):
+            facename = self.codeFaceName
+        else:
+            facename = self.defaultFontFaceName
+        if stc:
+            strBox.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
+                                "face:%s,size:%d" % (facename, self.faceSize))
+        else:
+            font.SetFaceName(facename)
+            strBox.SetFont(font)
+
+        if hasattr(event, 'Skip'):
+            event.Skip()
 
     def getParams(self):
         """retrieves data from any fields in self.paramCtrls
@@ -2202,9 +2350,31 @@ class _BaseParamsDlg(wx.Dialog):
             else:
                 ctrls = self.paramCtrls[fieldName]#the various dlg ctrls for this param
                 param.val = ctrls.getValue()
-                if ctrls.typeCtrl: param.valType = ctrls.getType()
-                if ctrls.updateCtrl: param.updates = ctrls.getUpdates()
+                if ctrls.typeCtrl:
+                    param.valType = ctrls.getType()
+                if ctrls.updateCtrl:
+                    #may also need to update a static
+                    updates = ctrls.getUpdates()
+                    if param.updates != updates:
+                        self._updateStaticUpdates(fieldName, param.updates, updates)
+                        param.updates=updates
         return self.params
+    def _updateStaticUpdates(self, fieldName, updates, newUpdates):
+        """If the old/new updates ctrl is using a Static component then we
+        need to remove/add the component name to the appropriate static
+        """
+        exp = self.frame.exp
+        compName = self.params['name'].val
+        if hasattr(updates, 'startswith') and "during:" in updates:
+            updates = updates.split(': ')[1] #remove the part that says 'during'
+            origRoutine, origStatic =  updates.split('.')
+            exp.routines[origRoutine].getComponentFromName(origStatic).remComponentUpdate(
+                origRoutine, compName, fieldName)
+        if hasattr(newUpdates, 'startswith') and  "during:" in newUpdates:
+            newUpdates = newUpdates.split(': ')[1] #remove the part that says 'during'
+            newRoutine, newStatic =  newUpdates.split('.')
+            exp.routines[newRoutine].getComponentFromName(newStatic).addComponentUpdate(
+                newRoutine, compName, fieldName)
     def _checkName(self, event=None, name=None):
         """checks namespace, return error-msg (str), enable (bool)
         """
@@ -2285,17 +2455,18 @@ class DlgLoopProperties(_BaseParamsDlg):
             self.conditions=loop.params['conditions'].val
             self.conditionsFile=loop.params['conditionsFile'].val
             self.trialHandler = self.currentHandler = loop
-            self.currentType=loop.params['loopType']#could be 'random', 'sequential', 'fullRandom'
+            self.currentType=loop.params['loopType'].val #could be 'random', 'sequential', 'fullRandom'
         elif loop.type=='StairHandler':
             self.stairHandler = self.currentHandler = loop
             self.currentType='staircase'
         elif loop.type=='MultiStairHandler':
+            self.conditions=loop.params['conditions'].val
+            self.conditionsFile=loop.params['conditionsFile'].val
             self.multiStairHandler = self.currentHandler = loop
-            self.currentType='interleaved staircase'
+            self.currentType='interleaved staircases'
         elif loop.type=='QuestHandler':
             pass # what to do for quest?
         self.params['name']=self.currentHandler.params['name']
-
         self.makeGlobalCtrls()
         self.makeStaircaseCtrls()
         self.makeConstantsCtrls()#the controls for Method of Constants
@@ -2324,7 +2495,7 @@ class DlgLoopProperties(_BaseParamsDlg):
 
         #make sure we set this back regardless of whether OK
         #otherwise it will be left as a summary string, not a conditions
-        if self.currentHandler.params.has_key('conditionsFile'):
+        if 'conditionsFile' in self.currentHandler.params:
             self.currentHandler.params['conditions'].val=self.conditions
 
     def makeGlobalCtrls(self):
@@ -2365,7 +2536,7 @@ class DlgLoopProperties(_BaseParamsDlg):
                 container.AddMany((ctrls.nameCtrl, ctrls.valueCtrl, ctrls.browseCtrl))
                 self.ctrlSizer.Add(container)
             elif fieldName=='conditions':
-                if handler.params.has_key('conditions'):
+                if 'conditions' in handler.params:
                     text=self.getTrialsSummary(handler.params['conditions'].val)
                 else:
                     text = """No parameters set"""
@@ -2407,7 +2578,7 @@ class DlgLoopProperties(_BaseParamsDlg):
                 container.AddMany((ctrls.nameCtrl, ctrls.valueCtrl, ctrls.browseCtrl))
                 self.ctrlSizer.Add(container)
             elif fieldName=='conditions':
-                if handler.params.has_key('conditions'):
+                if 'conditions' in handler.params:
                     text=self.getTrialsSummary(handler.params['conditions'].val)
                 else:
                     text = """No parameters set (select a file above)"""
@@ -2480,8 +2651,8 @@ class DlgLoopProperties(_BaseParamsDlg):
                 if hasattr(gridGUI, 'fileName'):
                     self.conditionsFile = gridGUI.fileName
         self.currentHandler.params['conditionsFile'].val = self.conditionsFile
-        if self.conditionsFile: # as set via DlgConditions
-            valCtrl = self.constantsCtrls['conditionsFile'].valueCtrl
+        if 'conditionsFile' in self.currentCtrls.keys(): # as set via DlgConditions
+            valCtrl = self.currentCtrls['conditionsFile'].valueCtrl
             valCtrl.Clear()
             valCtrl.WriteText(getAbbrev(self.conditionsFile))
         # still need to do namespace and internal updates (see end of onBrowseTrialsFile)
@@ -2497,7 +2668,7 @@ class DlgLoopProperties(_BaseParamsDlg):
         if ctrlType=='staircase':
             self.currentHandler = self.stairHandler
             toShow = self.staircaseCtrls
-        elif ctrlType=='interleaved staircase':
+        elif ctrlType=='interleaved staircases':
             self.currentHandler = self.multiStairHandler
             toShow = self.multiStairCtrls
         else:
@@ -2546,20 +2717,19 @@ class DlgLoopProperties(_BaseParamsDlg):
             except ImportError, msg:
                 msg = str(msg)
                 if msg.startswith('Could not open'):
-                    self.constantsCtrls['conditions'].setValue('Could not read conditions from:\n' + newFullPath.split(os.path.sep)[-1])
+                    self.currentCtrls['conditions'].setValue('Could not read conditions from:\n' + newFullPath.split(os.path.sep)[-1])
                     logging.error('Could not open as a conditions file: %s' % newFullPath)
                 else:
                     m2 = msg.replace('Conditions file ', '')
                     dlgErr = dialogs.MessageDialog(parent=self.frame,
                         message=m2.replace(': ', os.linesep * 2), type='Info',
                         title='Configuration error in conditions file').ShowModal()
-                    self.constantsCtrls['conditions'].setValue(
+                    self.currentCtrls['conditions'].setValue(
                         'Bad condition name(s) in file:\n' + newFullPath.split(os.path.sep)[-1])
                     logging.error('Rejected bad condition name(s) in file: %s' % newFullPath)
                 self.conditionsFile = self.conditionsFileOrig
                 self.conditions = self.conditionsOrig
                 return # no update or display changes
-
             duplCondNames = []
             if len(self.condNamesInFile):
                 for condName in self.condNamesInFile:
@@ -2573,8 +2743,8 @@ class DlgLoopProperties(_BaseParamsDlg):
                 if isSameFilePathAndName:
                     logging.info('Assuming reloading file: same filename and duplicate condition names in file: %s' % self.conditionsFile)
                 else:
-                    self.constantsCtrls['conditionsFile'].setValue(getAbbrev(newPath))
-                    self.constantsCtrls['conditions'].setValue(
+                    self.currentCtrls['conditionsFile'].setValue(getAbbrev(newPath))
+                    self.currentCtrls['conditions'].setValue(
                         'Warning: Condition names conflict with existing:\n['+duplCondNamesStr+
                         ']\nProceed anyway? (= safe if these are in old file)')
                     logging.warning('Duplicate condition names, different conditions file: %s' % duplCondNamesStr)
@@ -2582,8 +2752,8 @@ class DlgLoopProperties(_BaseParamsDlg):
             self.duplCondNames = duplCondNames # add after self.show() in __init__
 
             if needUpdate or 'conditionsFile' in self.currentCtrls.keys() and not duplCondNames:
-                self.constantsCtrls['conditionsFile'].setValue(getAbbrev(newPath))
-                self.constantsCtrls['conditions'].setValue(self.getTrialsSummary(self.conditions))
+                self.currentCtrls['conditionsFile'].setValue(getAbbrev(newPath))
+                self.currentCtrls['conditions'].setValue(self.getTrialsSummary(self.conditions))
 
     def getParams(self):
         """Retrieves data and re-inserts it into the handler and returns those handler params
@@ -2614,19 +2784,19 @@ class DlgLoopProperties(_BaseParamsDlg):
             if os.path.isfile(self.conditionsFile):
                 try:
                     self.conditions = data.importConditions(self.conditionsFile)
-                    self.constantsCtrls['conditions'].setValue(self.getTrialsSummary(self.conditions))
+                    self.currentCtrls['conditions'].setValue(self.getTrialsSummary(self.conditions))
                 except ImportError, msg:
-                    self.constantsCtrls['conditions'].setValue(
+                    self.currentCtrls['conditions'].setValue(
                         'Badly formed condition name(s) in file:\n'+str(msg).replace(':','\n')+
                         '.\nNeed to be legal as var name; edit file, try again.')
                     self.conditions = ''
                     logging.error('Rejected bad condition name in conditions file: %s' % str(msg).split(':')[0])
             else:
                 self.conditions = None
-                self.constantsCtrls['conditions'].setValue("No parameters set (conditionsFile not found)")
+                self.currentCtrls['conditions'].setValue("No parameters set (conditionsFile not found)")
         else:
             logging.debug('DlgLoop: could not determine if a condition filename was edited')
-            #self.constantsCtrls['conditions'] could be misleading at this point
+            #self.currentCtrls['conditions'] could be misleading at this point
     def onOK(self, event=None):
         # intercept OK in case user deletes or edits the filename manually
         if 'conditionsFile' in self.currentCtrls.keys():
@@ -2635,14 +2805,12 @@ class DlgLoopProperties(_BaseParamsDlg):
 
 class DlgComponentProperties(_BaseParamsDlg):
     def __init__(self,frame,title,params,order,
-            helpUrl=None, suppressTitles=True,
-            pos=wx.DefaultPosition, size=wx.DefaultSize,
+            helpUrl=None, suppressTitles=True,size=wx.DefaultSize,
             style=wx.DEFAULT_DIALOG_STYLE|wx.DIALOG_NO_PARENT,
             editing=False):
         style=style|wx.RESIZE_BORDER
         _BaseParamsDlg.__init__(self,frame,title,params,order,
-                                helpUrl=helpUrl,
-                                pos=pos,size=size,style=style,
+                                helpUrl=helpUrl,size=size,style=style,
                                 editing=editing)
         self.frame=frame
         self.app=frame.app
@@ -2676,11 +2844,11 @@ class DlgComponentProperties(_BaseParamsDlg):
 
 class DlgExperimentProperties(_BaseParamsDlg):
     def __init__(self,frame,title,params,order,suppressTitles=False,
-            pos=wx.DefaultPosition, size=wx.DefaultSize,helpUrl=None,
+            size=wx.DefaultSize,helpUrl=None,
             style=wx.DEFAULT_DIALOG_STYLE|wx.DIALOG_NO_PARENT):
         style=style|wx.RESIZE_BORDER
         _BaseParamsDlg.__init__(self,frame,'Experiment Settings',params,order,
-                                pos=pos,size=size,style=style,helpUrl=helpUrl)
+                                size=size,style=style,helpUrl=helpUrl)
         self.frame=frame
         self.app=frame.app
         self.dpi=self.app.dpi
@@ -2740,6 +2908,11 @@ class DlgExperimentProperties(_BaseParamsDlg):
         self.mainSizer.Add(self.ctrlSizer)
         self.mainSizer.Add(buttons, flag=wx.ALIGN_RIGHT)
         self.SetSizerAndFit(self.mainSizer)
+
+        #move the psoition to be v near the top of screen and to the right of the left-most edge of builder
+        builderPos = self.frame.GetPosition()
+        self.SetPosition((builderPos[0]+200,20))
+
         #do show and process return
         retVal = self.ShowModal()
         if retVal== wx.ID_OK: self.OK=True
@@ -3446,14 +3619,14 @@ class BuilderFrame(wx.Frame):
 
         ctrlKey = 'Ctrl+'  # show key-bindings in tool-tips in an OS-dependent way
         if sys.platform == 'darwin': ctrlKey = 'Cmd+'
-        self.toolbar.AddSimpleTool(self.IDs.tbFileNew, new_bmp, ("New [%s]" %self.app.keys['new']).replace('Ctrl+', ctrlKey), "Create new python file")
+        self.toolbar.AddSimpleTool(self.IDs.tbFileNew, new_bmp, ("New [%s]" %self.app.keys['new']).replace('Ctrl+', ctrlKey), "Create new experiment file")
         self.toolbar.Bind(wx.EVT_TOOL, self.app.newBuilderFrame, id=self.IDs.tbFileNew)
-        self.toolbar.AddSimpleTool(self.IDs.tbFileOpen, open_bmp, ("Open [%s]" %self.app.keys['open']).replace('Ctrl+', ctrlKey), "Open an existing file")
+        self.toolbar.AddSimpleTool(self.IDs.tbFileOpen, open_bmp, ("Open [%s]" %self.app.keys['open']).replace('Ctrl+', ctrlKey), "Open an existing experiment file")
         self.toolbar.Bind(wx.EVT_TOOL, self.fileOpen, id=self.IDs.tbFileOpen)
-        self.toolbar.AddSimpleTool(self.IDs.tbFileSave, save_bmp, ("Save [%s]" %self.app.keys['save']).replace('Ctrl+', ctrlKey),  "Save current file")
+        self.toolbar.AddSimpleTool(self.IDs.tbFileSave, save_bmp, ("Save [%s]" %self.app.keys['save']).replace('Ctrl+', ctrlKey),  "Save current experiment file")
         self.toolbar.EnableTool(self.IDs.tbFileSave, False)
         self.toolbar.Bind(wx.EVT_TOOL, self.fileSave, id=self.IDs.tbFileSave)
-        self.toolbar.AddSimpleTool(self.IDs.tbFileSaveAs, saveAs_bmp, ("Save As... [%s]" %self.app.keys['saveAs']).replace('Ctrl+', ctrlKey), "Save current python file as...")
+        self.toolbar.AddSimpleTool(self.IDs.tbFileSaveAs, saveAs_bmp, ("Save As... [%s]" %self.app.keys['saveAs']).replace('Ctrl+', ctrlKey), "Save current experiment file as...")
         self.toolbar.Bind(wx.EVT_TOOL, self.fileSaveAs, id=self.IDs.tbFileSaveAs)
         self.toolbar.AddSimpleTool(self.IDs.tbUndo, undo_bmp, ("Undo [%s]" %self.app.keys['undo']).replace('Ctrl+', ctrlKey), "Undo last action")
         self.toolbar.Bind(wx.EVT_TOOL, self.undo, id=self.IDs.tbUndo)
@@ -3493,7 +3666,8 @@ class BuilderFrame(wx.Frame):
         self.fileHistory = wx.FileHistory(maxFiles=10)
         self.recentFilesMenu = wx.Menu()
         self.fileHistory.UseMenu(self.recentFilesMenu)
-        for filename in self.appData['fileHistory']: self.fileHistory.AddFileToHistory(filename)
+        for filename in self.appData['fileHistory']:
+            self.fileHistory.AddFileToHistory(filename)
         self.Bind(
             wx.EVT_MENU_RANGE, self.OnFileHistory, id=wx.ID_FILE1, id2=wx.ID_FILE9
             )
@@ -3509,7 +3683,7 @@ class BuilderFrame(wx.Frame):
         wx.EVT_MENU(self, wx.ID_SAVE,  self.fileSave)
         self.fileMenu.Enable(wx.ID_SAVE, False)
         wx.EVT_MENU(self, wx.ID_SAVEAS,  self.fileSaveAs)
-        wx.EVT_MENU(self, wx.ID_CLOSE,  self.closeFrame)
+        wx.EVT_MENU(self, wx.ID_CLOSE,  self.commandCloseFrame)
         item = self.fileMenu.Append(wx.ID_PREFERENCES, text = "&Preferences")
         self.Bind(wx.EVT_MENU, self.app.showPrefs, item)
         #-------------quit
@@ -3603,23 +3777,29 @@ class BuilderFrame(wx.Frame):
 
         self.SetMenuBar(menuBar)
 
-    def closeFrame(self, event=None, checkSave=True):
 
-        if self.app.coder==None and sys.platform!='darwin':
-            if not self.app.quitting:
-                self.app.quit()
-                return#app.quit() will have closed the frame already
-        okToClose = self.fileClose(updateViews=False)#close file first (check for save) but no need to update view
+    def commandCloseFrame(self, event):
+        self.Close()
+
+    def closeFrame(self, event=None, checkSave=True):
+        okToClose = self.fileClose(updateViews=False, checkSave=checkSave)#close file first (check for save) but no need to update view
+
         if not okToClose:
-            return 0
+            if hasattr(event, 'Veto'):
+                event.Veto()
+            return
         else:
-            self.app.allFrames.remove(self)
-            self.app.builderFrames.remove(self)
-            self.Destroy()#close window
-            return 1#indicates all was successful (including check for save)
+            # is it the last frame?
+            if len(wx.GetApp().allFrames) == 1 and sys.platform != 'darwin' and not wx.GetApp().quitting:
+                wx.GetApp().quit(event)
+            else:
+                self.app.allFrames.remove(self)
+                self.app.builderFrames.remove(self)
+                self.Destroy() # required
+
     def quit(self, event=None):
         """quit the app"""
-        self.app.quit()
+        self.app.quit(event)
     def fileNew(self, event=None, closeCurrent=True):
         """Create a default experiment (maybe an empty one instead)"""
         #Note: this is NOT the method called by the File>New menu item. That calls app.newBuilderFrame() instead
@@ -3627,10 +3807,17 @@ class BuilderFrame(wx.Frame):
             if not self.fileClose(updateViews=False): return False #close the existing (and prompt for save if necess)
         self.filename='untitled.psyexp'
         self.exp = experiment.Experiment(prefs=self.app.prefs)
-        default_routine = 'trial'
-        self.exp.addRoutine(default_routine) #create the trial routine as an example
-        self.exp.flow.addRoutine(self.exp.routines[default_routine], pos=1)#add it to flow
-        self.exp.namespace.add(default_routine, self.exp.namespace.user) # add it to user's namespace
+        defaultName = 'trial'
+        self.exp.addRoutine(defaultName) #create the trial routine as an example
+        self.exp.flow.addRoutine(self.exp.routines[defaultName], pos=1)#add it to flow
+        self.exp.namespace.add(defaultName, self.exp.namespace.user) # add it to user's namespace
+        routine = self.exp.routines[defaultName]
+        #add an ISI component by default
+        components = self.componentButtons.components
+        ISI = components['StaticComponent'](self.exp, parentName=defaultName, name='ISI',
+                startType='time (s)', startVal=0.0,
+                stopType='duration (s)', stopVal=0.5)
+        routine.addComponent(ISI)
         self.resetUndoStack()
         self.setIsModified(False)
         self.updateAllViews()
@@ -3666,6 +3853,7 @@ class BuilderFrame(wx.Frame):
             #update the views
             self.updateAllViews()#if frozen effect will be visible on thaw
         self.updateReadme()
+        self.fileHistory.AddFileToHistory(filename)
 
     def fileSave(self,event=None, filename=None):
         """Save file, revert to SaveAs if the file hasn't yet been saved
@@ -3676,9 +3864,11 @@ class BuilderFrame(wx.Frame):
             if not self.fileSaveAs(filename):
                 return False #the user cancelled during saveAs
         else:
+            self.fileHistory.AddFileToHistory(filename)
             self.exp.saveToXML(filename)
         self.setIsModified(False)
         return True
+
     def fileSaveAs(self,event=None, filename=None):
         """
         """
@@ -3734,11 +3924,11 @@ class BuilderFrame(wx.Frame):
             pass
         self.updateWindowTitle()
         return returnVal
+
     def getShortFilename(self):
         """returns the filename without path or extension
         """
         return os.path.splitext(os.path.split(self.filename)[1])[0]
-
 
     def updateReadme(self):
         """Check whether there is a readme file in this folder and try to show it"""
@@ -3767,36 +3957,46 @@ class BuilderFrame(wx.Frame):
             self.readmeFrame.Show(value)
     def toggleReadme(self, evt=None):
         self.readmeFrame.toggleVisible()
+
     def OnFileHistory(self, evt=None):
         # get the file based on the menu ID
         fileNum = evt.GetId() - wx.ID_FILE1
         path = self.fileHistory.GetHistoryFile(fileNum)
-        self.setCurrentDoc(path)#load the file
+        self.fileOpen(filename=path)
         # add it back to the history so it will be moved up the list
         self.fileHistory.AddFileToHistory(path)
+
     def checkSave(self):
         """Check whether we need to save before quitting
         """
         if hasattr(self, 'isModified') and self.isModified:
-            dlg = dialogs.MessageDialog(self,'Experiment has changed. Save before quitting?', type='Warning')
+            self.Show(True)
+            self.Raise()
+            self.app.SetTopWindow(self)
+            message = 'Experiment %s has changed. Save before quitting?' % self.filename
+            dlg = dialogs.MessageDialog(self, message, type='Warning')
             resp = dlg.ShowModal()
-            dlg.Destroy()
-            if resp  == wx.ID_CANCEL: return False #return, don't quit
+            if resp == wx.ID_CANCEL:
+                return False #return, don't quit
             elif resp == wx.ID_YES:
-                if not self.fileSave(): return False #user might cancel during save
-            elif resp == wx.ID_NO: pass #don't save just quit
-        return 1
+                if not self.fileSave():
+                    return False #user might cancel during save
+            elif resp == wx.ID_NO:
+                pass #don't save just quit
+        return True
+
     def fileClose(self, event=None, checkSave=True, updateViews=True):
         """This is typically only called when the user x"""
         if checkSave:
             ok = self.checkSave()
             if not ok: return False#user cancelled
-
+        print 'closing', self.filename
         if self.filename==None:
             frameData=self.appData['defaultFrame']
         else:
             frameData = dict(self.appData['defaultFrame'])
             self.appData['prevFiles'].append(self.filename)
+
             #get size and window layout info
         if self.IsIconized():
             self.Iconize(False)#will return to normal mode to get size info
@@ -3950,7 +4150,7 @@ class BuilderFrame(wx.Frame):
             unpackFolder = os.path.join(unpackFolder, 'PsychoPy2 Demos')
             if not os.path.isdir(unpackFolder):
                 os.mkdir(unpackFolder)
-        misc.mergeFolder(os.path.join(self.paths['demos'], 'builder'), unpackFolder)
+        mergeFolder(os.path.join(self.paths['demos'], 'builder'), unpackFolder)
         self.prefs['unpackedDemosDir']=unpackFolder
         self.app.prefs.saveUserPrefs()
         self.demosMenuUpdate()
@@ -3979,7 +4179,7 @@ class BuilderFrame(wx.Frame):
             self.demosMenu.Append(thisID, shortname)
             wx.EVT_MENU(self, thisID, self.demoLoad)
     def runFile(self, event=None):
-        #get abs path of expereiment so it can be stored with data at end of exp
+        #get abs path of experiment so it can be stored with data at end of exp
         expPath = self.filename
         if expPath==None or expPath.startswith('untitled'):
             ok = self.fileSave()
@@ -4019,8 +4219,8 @@ class BuilderFrame(wx.Frame):
             #self.scriptProcessID = wx.Execute(command, wx.EXEC_ASYNC, self.scriptProcess)
             self.scriptProcessID = wx.Execute(command, wx.EXEC_ASYNC| wx.EXEC_NOHIDE, self.scriptProcess)
         else:
-            fullPath= fullPath.replace(' ','\ ')#for unix this signifis a space in a filename
-            pythonExec = sys.executable.replace(' ','\ ')#for unix this signifis a space in a filename
+            fullPath= fullPath.replace(' ','\ ')#for unix this signifies a space in a filename
+            pythonExec = sys.executable.replace(' ','\ ')#for unix this signifies a space in a filename
             command = '%s -u %s' %(pythonExec, fullPath)# the quotes would break a unix system command
             self.scriptProcessID = wx.Execute(command, wx.EXEC_ASYNC| wx.EXEC_MAKE_GROUP_LEADER, self.scriptProcess)
         self.toolbar.EnableTool(self.IDs.tbRun,False)
@@ -4116,6 +4316,9 @@ class BuilderFrame(wx.Frame):
         self.routinePanel.createNewRoutine()
 
     def generateScript(self, experimentPath):
+        if self.app.prefs.app['debugMode']:
+            return self.exp.writeScript(expPath=experimentPath)
+            # getting the track-back is very helpful when debugging the app
         try:
             script = self.exp.writeScript(expPath=experimentPath)
         except Exception as e:

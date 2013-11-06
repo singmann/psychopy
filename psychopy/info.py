@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Fetching data about the system"""
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 import sys, os, time, platform
@@ -178,7 +178,7 @@ class RunTimeInfo(dict):
             pass
         
         # when was this run?
-        self['experimentRunTime.epoch'] = core.getTime() # basis for default random.seed()
+        self['experimentRunTime.epoch'] = core.getAbsTime()  # basis for default random.seed()
         self['experimentRunTime'] = data.getDateStr(format="%Y_%m_%d %H:%M (Year_Month_Day Hour:Min)")
         
         # random.seed -- record the value, and initialize random.seed() if 'set:'

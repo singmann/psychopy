@@ -3,13 +3,13 @@
 These may one day get built into psychopy.visual
 """
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 import numpy
 from sys import platform
 from copy import copy
-from psychopy import misc, logging, monitors
+from psychopy import logging, monitors
 from OpenGL import GL
 import OpenGL.GL.ARB.multitexture as GL_multitexture
 try:

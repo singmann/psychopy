@@ -1,5 +1,5 @@
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 from _visual import * #to get the template visual component
@@ -51,7 +51,7 @@ class GratingComponent(VisualComponent):
             updates='constant', allowedUpdates=[],
             hint="Resolution of the texture for standard ones such as sin, sqr etc. For most cases a value of 256 pixels will suffice",
             label="Texture resolution")
-        self.params['interpolate']=Param(mask, valType='str', allowedVals=['linear','nearest'],
+        self.params['interpolate']=Param(interpolate, valType='str', allowedVals=['linear','nearest'],
             updates='constant', allowedUpdates=[],
             hint="How should the image be interpolated if/when rescaled",
             label="Interpolate")

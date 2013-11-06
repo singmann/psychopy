@@ -1,5 +1,5 @@
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 from _base import *
@@ -14,8 +14,8 @@ class SoundComponent(BaseComponent):
     """An event class for presenting sound stimuli"""
     categories = ['Stimuli']
     def __init__(self, exp, parentName, name='sound_1', sound='A',volume=1,
-                startType='time (s)', startVal=0.0,
-                stopType='duration (s)', stopVal=1.0,
+                startType='time (s)', startVal='0.0',
+                stopType='duration (s)', stopVal='1.0',
                 startEstim='', durationEstim=''):
         self.type='Sound'
         self.url="http://www.psychopy.org/builder/components/sound.html"

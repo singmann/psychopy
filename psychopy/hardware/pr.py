@@ -4,7 +4,7 @@ See http://www.photoresearch.com/
 --------
 """
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 from psychopy import logging
@@ -37,7 +37,7 @@ class PR650:
         Various messages are printed to the log regarding the function of this device,
         but to see them you need to set the printing of the log to the correct level::
 
-            from psychopy import log
+            from psychopy import logging
             logging.console.setLevel(logging.ERROR)#error messages only
             logging.console.setLevel(logging.INFO)#will give a little more info
             logging.console.setLevel(logging.DEBUG)#will export a log of all communications

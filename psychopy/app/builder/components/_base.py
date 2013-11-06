@@ -1,5 +1,5 @@
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 import wx, copy
@@ -61,7 +61,8 @@ class BaseComponent(object):
         """Test whether we need to start
         """
         if self.params['startType'].val=='time (s)':
-            if not self.params['startVal'].val.strip():
+            #if startVal is an empty string then set to be 0.0
+            if isinstance(self.params['startVal'].val, basestring) and not self.params['startVal'].val.strip():
                 self.params['startVal'].val = '0.0'
             buff.writeIndented("if t >= %(startVal)s and %(name)s.status == NOT_STARTED:\n" %(self.params))
         elif self.params['startType'].val=='frame N':
@@ -97,24 +98,54 @@ class BaseComponent(object):
             raise "Didn't write any stop line for startType=%(startType)s, stopType=%(stopType)s" %(self.params)
         buff.setIndentLevel(+1,relative=True)
 
-    def writeParamUpdates(self, buff, updateType):
+    def writeParamUpdates(self, buff, updateType, paramNames=None):
         """write updates to the buffer for each parameter that needs it
         updateType can be 'experiment', 'routine' or 'frame'
         """
-        #add this once all stimulus setXXX() methods have an autoLog argument
-#        if updateType=='frame':
-#            logStr = ", autoLog=False"
-#            logComment="#updating too often to be worth logging"
-#        else:
-#            logStr = logComment=""
-
-        for thisParamName in self.params.keys():
+        if paramNames==None:
+            paramNames = self.params.keys()
+        for thisParamName in paramNames:
+            if thisParamName=='advancedParams':
+                continue # advancedParams is not really a parameter itself
             thisParam=self.params[thisParamName]
             if thisParam.updates==updateType:
-                if thisParamName=='color':
-                    paramCaps=self.params['colorSpace'].upper() #setRGB, not setColor
-                else:paramCaps=thisParamName.capitalize()
-                buff.writeIndented("%s.set%s(%s)\n" %(self.params['name'],paramCaps, thisParam) )
+                self.writeParamUpdate(buff, self.params['name'],
+                    thisParamName, thisParam, thisParam.updates)
+    def writeParamUpdate(self, buff, compName, paramName, val, updateType, params=None):
+        """Writes an update string for a single parameter.
+        This should not need overriding for different components - try to keep
+        constant
+        """
+        if params==None:
+            params=self.params
+        #first work out the name for the set____() function call
+        if paramName=='advancedParams':
+            return # advancedParams is not really a parameter itself
+        elif paramName=='letterHeight':
+            paramCaps='Height' #setHeight for TextStim
+        elif paramName=='image' and self.getType()=='PatchComponent':
+            paramCaps='Tex' #setTex for PatchStim
+        elif paramName=='sf':
+            paramCaps='SF' #setSF, not SetSf
+        elif paramName=='coherence':
+            paramCaps='FieldCoherence'
+        elif paramName=='fieldPos':
+            paramCaps='FieldPos'
+        else:
+            paramCaps = paramName[0].capitalize() + paramName[1:]
+        #then write the line
+        if updateType=='set every frame':
+            loggingStr = ', log=False'
+        else:
+            loggingStr = ''
+        #write the line
+        if paramName=='color':
+            buff.writeIndented("%s.setColor(%s, colorSpace=%s" \
+                %(compName, params['color'], params['colorSpace']))
+            buff.write("%s)\n" %(loggingStr))
+        else:
+            buff.writeIndented("%s.set%s(%s%s)\n" %(compName, paramCaps, val, loggingStr))
+
     def checkNeedToUpdate(self, updateType):
         """Determine whether this component has any parameters set to repeat at this level
 
@@ -140,7 +171,7 @@ class BaseComponent(object):
         nonSlipSafe indicates that the component's duration is a known fixed
         value and can be used in non-slip global clock timing (e.g for fMRI)
         """
-        if not self.params.has_key('startType'):
+        if not 'startType' in self.params:
             return None, None, True#this component does not have any start/stop
         startType=self.params['startType'].val
         stopType=self.params['stopType'].val

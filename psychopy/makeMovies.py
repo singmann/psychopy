@@ -1,5 +1,5 @@
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 """
@@ -11,8 +11,13 @@ very heavily based on his code).
 """
 from psychopy import logging
 import string, time, tempfile, os, glob, random
-import Image, ImageChops
-from GifImagePlugin import getheader, getdata #part of PIL
+try:
+    from PIL import Image, ImageChops
+    from PIL.GifImagePlugin import getheader, getdata #part of PIL
+except ImportError:
+    import Image, ImageChops
+    from GifImagePlugin import getheader, getdata #part of PIL
+
 try:
     import pymedia.video.vcodec as vcodec
     havePyMedia=True
@@ -88,7 +93,7 @@ def RgbHistogram (images, verbose=False):
         color = datalist [i]
         key = repr (color)
 
-        if dicthist.has_key (key):  # color already exists
+        if key in dicthist:  # color already exists
             dicthist [key] += 1     # increment the count
         else:                       # make a new key
             dicthist [key] = 1      # instantiate a new entry and init the count

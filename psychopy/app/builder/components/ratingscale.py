@@ -1,5 +1,5 @@
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 from _base import *
@@ -21,11 +21,11 @@ class RatingScaleComponent(BaseComponent):
                  scaleDescription='',
                  categoryChoices='',
                  visualAnalogScale=False,
-                 low=1, high=7,
+                 low='1', high='7',
                  singleClick=False,
-                 size=1.0,
+                 size='1.0',
                  pos='0, -0.4',
-                 startType='time (s)', startVal=0.0,
+                 startType='time (s)', startVal='0.0',
                  stopType='condition', stopVal='',
                  startEstim='', durationEstim='',
                  forceEndRoutine=True,
@@ -109,10 +109,10 @@ class RatingScaleComponent(BaseComponent):
             hint="Should accepting a rating cause the end of the routine (e.g. trial)?")
         self.params['lowAnchorText'] = Param(lowAnchorText, valType='str', allowedTypes=[],
             updates='constant', allowedUpdates=[],
-            hint="Description of the low end of the scale")
+            hint="Description of the low end of the scale; to hide it, set it to a space.")
         self.params['highAnchorText'] = Param(highAnchorText, valType='str', allowedTypes=[],
             updates='constant', allowedUpdates=[],
-            hint="Description of the high end of the scale")
+            hint="Description of the high end of the scale; to hide it, set it to a space.")
         self.params['customize_everything'] = Param(customize_everything, valType='str', allowedTypes=[],
             updates='constant', allowedUpdates=[],
             hint="Use this text to create the rating scale as you would in a code component; overrides all"+
@@ -124,7 +124,7 @@ class RatingScaleComponent(BaseComponent):
         if self.params['customize_everything'].val.strip() != '':
             # clean it up a little, remove win=*, leading / trailing typos
             self.params['customize_everything'].val = re.sub(r"[\\s,]*win=[^,]*,", '', self.params['customize_everything'].val)
-            init_str += ', ' + self.params['customize_everything'].val.lstrip().lstrip('(').lstrip(',').strip().strip(')').strip(',')
+            init_str += ', ' + self.params['customize_everything'].val.lstrip('(, ').strip('), ')
         else:
             init_str += ", escapeKeys=['escape']"
             # size:
@@ -135,15 +135,14 @@ class RatingScaleComponent(BaseComponent):
             # position: x -> (x,x); x,y -> (x,y)
             try:
                 s = str(self.params['pos'].val)
-                s = s.lstrip().lstrip('(').lstrip('[').strip().strip(')').strip(']')
+                s = s.lstrip('([ ').strip(')] ')
                 pos = map(float, s.split(',')) * 2
-                init_str += ",\n    pos=%s" % pos[0:2]
+                init_str += ", pos=%s" % pos[0:2]
             except:
                 pass # pos = None
 
             # type of scale:
-            choices = str(self.params['categoryChoices'].val).strip().strip(',').lstrip().lstrip(',')
-            scaleDescription = str(self.params['scaleDescription'].val)
+            choices = unicode(self.params['categoryChoices'].val).strip(', ').lstrip(', ')
             if self.params['visualAnalogScale'].val:
                 if self.params['lowAnchorText'].val == '': self.params['lowAnchorText'].val = '0%'
                 if self.params['highAnchorText'].val == '': self.params['highAnchorText'].val = '100%'
@@ -151,38 +150,35 @@ class RatingScaleComponent(BaseComponent):
                 init_str += "', highAnchorText='"+self.params['highAnchorText'].val+"'"
                 init_str += ",\n    precision=100, markerStyle='glow', showValue=False, markerExpansion=0"
             elif len(choices):
-                if choices.find(',') > -1:
+                if ',' in choices:
                     ch_list = choices.split(',')
                 else:
                     ch_list = choices.split(' ')
-                ch_list = [c.strip().strip(',').lstrip().lstrip(',') for c in ch_list]
-                init_str += ', choices=' + str(ch_list)
+                ch_list = [c.strip().strip(', ').lstrip(', ') for c in ch_list]
+                init_str += ', choices=' + unicode(ch_list)
                 if self.params['choiceLabelsAboveLine'].val:
                     init_str += ', labels=False'
             else:
-                # low/lowAnchorText
+                # try to add low as int; but might be a var instead
+                try:
+                    init_str += ', low=%d' % int(self.params['low'].val)
+                except ValueError:
+                    if self.params['low'].val:
+                        init_str += ", low=%s" % self.params['low']
                 if len(self.params['lowAnchorText'].val):
-                    init_str += ", lowAnchorText='"+self.params['lowAnchorText'].val+"'"
-                else:
-                    try:
-                        int(self.params['low'].val)
-                        init_str += ', low='+self.params['low'].val
-                    except ValueError:
-                        if len(self.params['low'].val):
-                            init_str += ", lowAnchorText='"+self.params['low'].val+"'"
-                # high/highAnchorText
-                if len(self.params['highAnchorText'].val):
-                    init_str += ", highAnchorText='"+self.params['highAnchorText'].val+"'"
-                else:
-                    try:
-                        int(self.params['high'].val)
-                        init_str += ', high='+self.params['high'].val
-                    except ValueError:
-                        if len(self.params['high'].val):
-                            init_str += ", highAnchorText='"+self.params['high'].val+"'"
+                    init_str += ", lowAnchorText=%s" % self.params['lowAnchorText']
 
-            if not len(choices) and len(str(scaleDescription)):
-                init_str += ", scale='" + str(scaleDescription) +"'"
+                # high/highAnchorText
+                try:
+                    init_str += ', high=%d' % int(self.params['high'].val)
+                except ValueError:
+                    if len(self.params['high'].val):
+                        init_str += ", high=%s" % self.params['high']
+                if self.params['highAnchorText'].val:
+                    init_str += ", highAnchorText=%s" % self.params['highAnchorText']
+
+            if not len(choices) and len(unicode(self.params['scaleDescription'])):
+                init_str += ", scale=%s" % self.params['scaleDescription']
             if self.params['singleClick'].val:
                 init_str += ", singleClick=True"
             if self.params['disappear'].val:

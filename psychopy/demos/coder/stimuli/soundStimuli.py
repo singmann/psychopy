@@ -1,22 +1,25 @@
 #!/usr/bin/env python
 
 """
-For sound use, I really recommend installing pygame (v1.8 or later). 
-For users of the intel-Mac app bundle you already have it. Pyglet will
-play sounds, but I find them unpredictable in timing and (sometimes they
-don't seem to play at all. :-(
+Sound stimuli are currently an area of development in PsychoPy
 
-PsychoPy sound handling with pygame is not ideal, with a latency of 20-30ms, but at least with pygame it is robust - 
-all sounds play consistently. I hope one day to write a better, low-level handler for playing sounds directly from the
-drivers (e.g. CoreAudio, DirectSound, ASIO), but for now, pygame will have to do.
+Previously we used pygame. Now the pyo library is also supported.
+On OSX this is an improvement (using coreaudio rather than SDL). 
+On windows this should help on systems with good sound cards, 
+but this is yet to be confirmed. 
+See the demo hardware>testSoundLatency too
 
 """
 import sys
-from psychopy import logging
+from psychopy import logging, prefs
 logging.console.setLevel(logging.DEBUG)#get messages about the sound lib as it loads
 
 from psychopy import sound,core, visual
-print 'Using %s for sounds' %sound.audioAPI
+if prefs.general['audioLib'][0] == 'pyo':
+    #if pyo is the first lib in the list of preferred libs then we could use small buffer
+    #pygame sound is very bad with a small buffer though
+    sound.init(48000,buffer=128)
+print 'Using %s(with %s) for sounds' %(sound.audioLib, sound.audioDriver)
 
 highA = sound.Sound('A',octave=3, sampleRate=44100, secs=0.8, bits=8)
 highA.setVolume(0.8)

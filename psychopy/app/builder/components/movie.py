@@ -1,5 +1,5 @@
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 from _visual import * #to get the template visual component
@@ -11,7 +11,7 @@ iconFile = path.join(thisFolder,'movie.png')
 tooltip = 'Movie: play movie files'
 
 class MovieComponent(VisualComponent):
-    """An event class for presenting image-based stimuli"""
+    """An event class for presenting movie-based stimuli"""
     def __init__(self, exp, parentName, name='movie', movie='',
                 units='from exp settings',
                 pos=[0,0], size='', ori=0,

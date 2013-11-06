@@ -1133,7 +1133,7 @@ class CoderFrame(wx.Frame):
         wx.EVT_CLOSE(self, self.closeFrame)#NB not the same as quit - just close the window
         wx.EVT_IDLE(self, self.onIdle)
 
-        if self.appData.has_key('state') and self.appData['state']=='maxim':
+        if 'state' in self.appData and self.appData['state']=='maxim':
             self.Maximize()
         #initialise some attributes
         self.modulesLoaded=False #will turn true when loading thread completes
@@ -1394,6 +1394,8 @@ class CoderFrame(wx.Frame):
         wx.EVT_MENU(self, self.IDs.openBuilderView,  self.app.showBuilder)
         #        self.viewMenu.Append(self.IDs.openShell, "Go to &IPython Shell\t%s" %self.app.keys['switchToShell'], "Go to a shell window for interactive commands")
         #        wx.EVT_MENU(self, self.IDs.openShell,  self.app.showShell)
+        #self.viewMenu.Append(self.IDs.openIPythonNotebook, "Go to &IPython notebook", "Open an IPython notebook (unconnected in a browser)")
+        #wx.EVT_MENU(self, self.IDs.openIPythonNotebook,  self.app.openIPythonNotebook)
 
         self.demosMenu = wx.Menu()
         self.demos={}
@@ -1408,28 +1410,35 @@ class CoderFrame(wx.Frame):
             submenu = wx.Menu()
             self.demosMenu.AppendSubMenu(submenu, folderName)
 
-            #find the files in the folder
-            demoList = glob.glob(os.path.join(folder,'*.py'))
+            #find the files in the folder (search two levels deep)
+            demoList = glob.glob(os.path.join(folder, '*.py'))
+            demoList += glob.glob(os.path.join(folder, '*', '*.py'))
+            demoList += glob.glob(os.path.join(folder, '*', '*', '*.py'))
+
             demoList.sort(key=str.lower)
             demoIDs = map(lambda _makeID: wx.NewId(), range(len(demoList)))
 
             for n in range(len(demoList)):
                 self.demos[demoIDs[n]] = demoList[n]
             for thisID in demoIDs:
-                junk, shortname = os.path.split(self.demos[thisID])
-                if shortname.startswith('_'): continue#remove any 'private' files
+                shortname = self.demos[thisID].split(os.path.sep)[-1]
+                if shortname == "run.py":
+                    # file is just "run" so get shortname from directory name instead
+                    shortname = self.demos[thisID].split(os.path.sep)[-2]
+                if shortname.startswith('_'):
+                    continue  # remove any 'private' files
                 submenu.Append(thisID, shortname)
                 wx.EVT_MENU(self, thisID, self.loadDemo)
         #also add simple demos to root
         self.demosMenu.AppendSeparator()
         for filename in glob.glob(os.path.join(self.paths['demos'],'coder','*.py')):
             junk, shortname = os.path.split(filename)
-            if shortname.startswith('_'): continue#remove any 'private' files
+            if shortname.startswith('_'):
+                continue  # remove any 'private' files
             thisID = wx.NewId()
             self.demosMenu.Append(thisID, shortname)
             self.demos[thisID] = filename
             wx.EVT_MENU(self, thisID, self.loadDemo)
-
 
         #---_help---#000000#FFFFFF--------------------------------------------------
         self.helpMenu = wx.Menu()
@@ -1621,13 +1630,22 @@ class CoderFrame(wx.Frame):
             doc = self.notebook.GetPage(ii)
             filename=doc.filename
             if doc.UNSAVED:
+                self.notebook.SetSelection(ii) #fetch that page and show it
+                #make sure frame is at front
+                self.Show(True)
+                self.Raise()
+                self.app.SetTopWindow(self)
+                #then bring up dialog
                 dlg = dialogs.MessageDialog(self,message='Save changes to %s before quitting?' %filename, type='Warning')
                 resp = dlg.ShowModal()
                 sys.stdout.flush()
                 dlg.Destroy()
-                if resp  == wx.ID_CANCEL: return 0 #return, don't quit
-                elif resp == wx.ID_YES: self.fileSave() #save then quit
-                elif resp == wx.ID_NO: pass #don't save just quit
+                if resp  == wx.ID_CANCEL:
+                    return 0 #return, don't quit
+                elif resp == wx.ID_YES:
+                    self.fileSave() #save then quit
+                elif resp == wx.ID_NO:
+                    pass #don't save just quit
         return 1
 
     def closeFrame(self, event=None, checkSave=True):
@@ -1636,10 +1654,12 @@ class CoderFrame(wx.Frame):
         """
         if len(self.app.builderFrames)==0 and sys.platform!='darwin':
             if not self.app.quitting:
-                self.app.quit()
+                self.app.quit(event) #send the event so it can be vetoed if neded
                 return#app.quit() will have closed the frame already
 
-        if checkSave: self.checkSave()#check all files before initiating close of any
+        if checkSave:
+            if self.checkSave()==0:#check all files before initiating close of any
+                return 0 #this signals user cancelled
 
         wasShown = self.IsShown()
         self.Hide()#ugly to see it close all the files independently
@@ -2120,8 +2140,9 @@ class CoderFrame(wx.Frame):
             self.prefs['showOutput']=True
             self.paneManager.GetPane('Shelf').Show()
             #will we actually redirect the output?
-            sys.stdout = self.outputWindow
-            sys.stderr = self.outputWindow
+            if not self.app.testMode:#don't if we're doing py.tests or we lose the output
+                sys.stdout = self.outputWindow
+                sys.stderr = self.outputWindow
         else:
             #show the pane
             self.prefs['showOutput']=False

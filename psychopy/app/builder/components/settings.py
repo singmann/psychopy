@@ -40,7 +40,7 @@ class SettingsComponent:
         self.params['colorSpace']=Param(colorSpace, valType='str', allowedVals=['rgb','dkl','lms'],
             hint="Needed if color is defined numerically (see PsychoPy documentation on color spaces)")
         self.params['Units']=Param(units, valType='str', allowedTypes=[],
-            allowedVals=['use prefs', 'deg','pix','cm','norm'],
+            allowedVals=['use prefs', 'deg','pix','cm','norm','height'],
             hint="Units to use for window/stimulus coordinates (e.g. cm, pix, deg")
         self.params['Show mouse']=Param(showMouse, valType='bool', allowedTypes=[],
             hint="Should the mouse be visible on screen?")
@@ -127,6 +127,9 @@ class SettingsComponent:
         buff.writeIndented("    savePickle=%(Save psydat file)s, saveWideText=%(Save wide csv file)s,\n" %self.params)
         buff.writeIndented("    dataFileName=filename)\n")
 
+    def writeWindowCode(self,buff):
+        """ setup the window code
+        """
         buff.writeIndentedLines("\n# Setup the Window\n")
         #get parameters for the Window
         fullScr = self.params['Full-screen window'].val
@@ -136,15 +139,14 @@ class SettingsComponent:
            for thisComp in thisRoutine: #a single routine is a list of components
                if thisComp.type=='Aperture': allowStencil = True
                if thisComp.type=='RatingScale': allowGUI = True # to have a mouse; BUT might not want it shown in other routines
-
-        
+               
         requestedScreenNumber = int(self.params['Screen'].val)
         if requestedScreenNumber > wx.Display.GetCount():
             logging.warn("Requested screen can't be found. Writing script using first available screen.")
             screenNumber = 0
         else:
             screenNumber = requestedScreenNumber-1 #computer has 1 as first screen
-        
+
         if fullScr:
             size = wx.Display(screenNumber).GetGeometry()[2:4]
         else:
@@ -160,11 +162,16 @@ class SettingsComponent:
         if 'microphone' in self.exp.psychopyLibs: # need a pyo Server
             buff.writeIndentedLines("\n# Enable sound input/output:\n"+
                                 "microphone.switchOn()\n")
+
+        buff.writeIndented("# store frame rate of monitor if we can measure it successfully\n")
+        buff.writeIndented("expInfo['frameRate']=win.getActualFrameRate()\n")
+        buff.writeIndented("if expInfo['frameRate']!=None:\n")
+        buff.writeIndented("    frameDur = 1.0/round(expInfo['frameRate'])\n")
+        buff.writeIndented("else:\n")
+        buff.writeIndented("    frameDur = 1.0/60.0 # couldn't get a reliable measure so guess\n")
+
     def writeEndCode(self,buff):
         """write code for end of experiment (e.g. close log file)
         """
-        buff.writeIndentedLines("\n# Shutting down:\n")
-        if 'microphone' in self.exp.psychopyLibs:
-            buff.writeIndented("microphone.switchOff()\n")
         buff.writeIndented("win.close()\n")
         buff.writeIndented("core.quit()\n")

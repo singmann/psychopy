@@ -1,20 +1,18 @@
 
 PsychoPy is an open-source application to allow the presentation of stimuli and collection of data for a wide range of neuroscience, psychology and psychophysics experiments. It's a free, powerful alternative to Presentation |TM| or e-Prime |TM|, written in Python (a free alternative to Matlab |TM| ).
 
-.. raw:: html
-
-    <style> .red {color:red; font-weight:bold} </style>
-
-.. role:: red
-
 News
 ====================
 
-:red:`Python Programming 3 day workshop` on **26-28th March** Are you just switching to PsychoPy from Matlab? Are you using the Builder but want to learn to code? Come to this `3 day Python for Neuroscience <http://www.psychopy.org/resources/P4N-workshop.html>`_ workshop run by Jon Peirce at University of Nottingham. **Note the slight date change, to avoid Easter Friday**
+**Latest stable version**: 1.77.02 was released July 2013, with several performance improvements. See complete :doc:`changelog`
 
-**Latest version**: 1.75.01 was released Oct 2012. 1.74.00, which was a very major update with lots of new features, especially to the handling of data outputs. Check carefully that this works for you before deploying in your experiments and note that Builder experiments saved from 1.74.xx cannot be opened by older versions. See complete :doc:`changelog`
+**Cutting edge version**: 1.78.00 was released Aug 2013. Adds 'Static Component' to allow pre-loading of images, and Shape Component for standard geometric shapes
 
-**Video tutorial**: You can now see a `youtube PsychoPy tutorial <http://www.youtube.com/watch?v=VV6qhuQgsiI>`_ showing you how to build a simple experiment in the Builder interface
+**Upcoming Workshops**:
+    
+    * Jon Peirce is running a 1/2-day `PsychoPy workshop at ECVP <http://www.ecvp.uni-bremen.de/node/46>`_
+    
+    * We'll be running a multi-day :ref:`Python for Neuroscience workshop <P4N>` again in April 2014 at Nottingham University. I'm hoping we'll be able to run Novice and Intermediate streams this year (last year was novice-only), with contributing experienced users from all over the world (last year was just Jon) 
 
 .. title:: Home
 

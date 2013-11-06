@@ -1,5 +1,5 @@
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 import urllib2, re, glob
@@ -309,7 +309,7 @@ class InstallUpdateDialog(wx.Dialog):
             v=self.latest['version']
 
         #open page
-        URL = "http://psychopy.googlecode.com/files/PsychoPy-%s.zip" %(v)
+        URL = "https://sourceforge.net/projects/psychpy/files/PsychoPy-%s.zip" %(v)
         page = urllib2.urlopen(URL)
         #download in chunks so that we can monitor progress and abort mid-way through
         chunk=4096; read = 0

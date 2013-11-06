@@ -21,7 +21,7 @@ messages, (which PsychoPy doesn't use) using the commands::
 
 """
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 #Much of the code below is based conceptually, if not syntactically, on the
@@ -29,7 +29,8 @@ messages, (which PsychoPy doesn't use) using the commands::
 #of log entries for later writing (don't want files written while drawing)
 
 from os import path
-import sys, time, codecs, weakref
+import sys, codecs, weakref
+import clock
 
 _packagePath = path.split(__file__)[0]
 
@@ -89,20 +90,9 @@ def addLevel(level, levelName):
     _levelNames[level] = levelName
     _levelNames[levelName] = level
 
-class _Clock:
-    #identical to core.Clock - but we can't import core into log for recurrent import issues
-    def __init__(self):
-        self.timeAtLastReset=getTime()#this is sub-millisec timer in python
-    def getTime(self):
-        return getTime()-self.timeAtLastReset
-    def reset(self, newT=0.0):
-        self.timeAtLastReset=getTime()+newT
-if sys.platform == 'win32':
-    getTime = time.clock
-else:
-    getTime = time.time
+
 global defaultClock
-defaultClock = _Clock()
+defaultClock = clock.monotonicClock
 
 def setDefaultClock(clock):
     """Set the default clock to be used to reference all logging times. Must be a
@@ -178,7 +168,7 @@ class _Logger:
     self.targets is a list of dicts {'stream':stream, 'level':level}
 
     """
-    def __init__(self, format="%(t).4f\t%(levelname)s\t%(message)s"):
+    def __init__(self, format="%(t).4f \t%(levelname)s \t%(message)s"):
         """The string-formatted elements %(xxxx)f can be used, where
         each xxxx is an attribute of the LogEntry.
         e.g. t, t_ms, level, levelname, message
@@ -190,11 +180,9 @@ class _Logger:
         self.lowestTarget=50
     def __del__(self):
         self.flush()
-        #try:
-        #    self.flush()
-        #except TypeError: # can happen in tests, mildly distracting
-        #    '''Exception TypeError: "'NoneType' object is not callable" in <bound method _Logger.__del__ of <psychopy.logging._Logger instance at 0x12dc788>> ignored'''
-        #    pass
+        # unicode logged to coder output window can cause logger failure, with
+        # error message pointing here. this is despite it being ok to log to
+        # terminal or Builder output. proper fix: fix coder unicode bug #97 (currently closed)
     def addTarget(self,target):
         """Add a target, typically a :class:`~log.LogFile` to the logger
         """
@@ -233,11 +221,12 @@ class _Logger:
         for target in self.targets:
             for thisEntry in self.toFlush:
                 if thisEntry.level>=target.level:
-                    if not formatted.has_key(thisEntry):
+                    if not thisEntry in formatted:
                         #convert the entry into a formatted string
                         formatted[thisEntry]= self.format %thisEntry.__dict__
                     target.write(formatted[thisEntry]+'\n')
-            target.stream.flush()
+            if hasattr(target.stream, 'flush'):
+                target.stream.flush()
         #finished processing entries - move them to self.flushed
         self.flushed.extend(self.toFlush)
         self.toFlush=[]#a new empty list
@@ -310,7 +299,7 @@ def log(msg, level, t=None, obj=None):
 
     usage::
         log(level, msg, t=t, obj=obj)
+
     Log the msg, at a  given level on the root logger
     """
     root.log(msg, level=level, t=t, obj=obj)
-

@@ -1,17 +1,34 @@
 """Basic functions, including timing, rush (imported), quit
 """
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
-import sys, time, threading
+import sys, threading
+from clock import MonotonicClock, Clock, CountdownTimer, wait, monotonicClock, getAbsTime
 # always safe to call rush, even if its not going to do anything for a particular OS
 from psychopy.platform_specific import rush
-from psychopy import logging
+from . import logging
+from constants import *
 import subprocess, shlex
 
 runningThreads=[] # just for backwards compatibility?
-pyoServers = []
+
+# Set getTime in core to == the monotonicClock instance created in the clockModule.
+# The logging module sets the defaultClock to == clock.monotonicClock,
+# so by default the core.getTime() and logging.defaultClock.getTime()
+# functions return the 'same' timebase.
+#
+# This way 'all' OSs have a core.getTime() timebase that starts at 0.0 when the experiment
+# is launched, instead of it being this way on Windows only (which was also a
+# descripancy between OS's when win32 was using time.clock).
+def getTime():
+    """Get the current time since psychopy.core was loaded.
+
+    Version Notes: Note that prior to PsychoPy 1.77.00 the behaviour of getTime()
+    was platform dependent (on OSX and linux it was equivalent to :func:`psychopy.core.getAbsTime`
+    whereas on windows it returned time since loading of the module, as now)"""
+    return monotonicClock.getTime()
 
 try:
     import pyglet
@@ -32,125 +49,7 @@ def quit():
             thisThread.stop()
             while thisThread.running==0:
                 pass#wait until it has properly finished polling
-    # could check serverCreated() serverBooted() but then need to import pyo
-    # checking serverCreated() does not tell you whether it was shutdown or not
-    for ps in pyoServers: # should only ever be one Server instance...
-        ps.stop()
-        wait(.25)
-        ps.shutdown()
     sys.exit(0)#quits the python session entirely
-
-#set the default timing mechanism
-"""(The difference in default timer function is because on Windows,
-clock() has microsecond granularity but time()'s granularity is 1/60th
-of a second; on Unix, clock() has 1/100th of a second granularity and
-time() is much more precise.  On Unix, clock() measures CPU time
-rather than wall time.)"""
-if sys.platform == 'win32':
-    getTime = time.clock
-else:
-    getTime = time.time
-
-class Clock:
-    """A convenient class to keep track of time in your experiments.
-    You can have as many independent clocks as you like (e.g. one
-    to time responses, one to keep track of stimuli...)
-    The clock is based on python.time.time() which is a sub-millisec
-    timer on most machines. i.e. the times reported will be more
-    accurate than you need!
-    """
-    def __init__(self):
-        self.timeAtLastReset=getTime()#this is sub-millisec timer in python
-    def getTime(self):
-        """Returns the current time on this clock in secs (sub-ms precision)
-        """
-        return getTime()-self.timeAtLastReset
-    def reset(self, newT=0.0):
-        """Reset the time on the clock. With no args time will be
-        set to zero. If a float is received this will be the new
-        time on the clock
-        """
-        self.timeAtLastReset=getTime()+newT
-    def add(self,t):
-        """Add more time to the clock's 'start' time (t0).
-
-        Note that, by adding time to t0, you make the current time appear less.
-        Can have the effect that getTime() returns a negative number that will
-        gradually count back up to zero.
-
-        e.g.::
-
-            timer = core.Clock()
-            timer.add(5)
-            while timer.getTime()<0:
-                #do something
-        """
-        self.timeAtLastReset += t
-
-class CountdownTimer(Clock):
-    """Similar to a Clock except that time counts down from the time of last reset
-
-    Typical usage::
-
-        timer = core.CountdownTimer()
-        timer.add(5)
-        while timer.getTime(): #after 5s will become negative
-            #do stuff
-    """
-    def getTime(self):
-        """Returns the current time on this clock in secs (sub-ms precision)
-        """
-        return self.timeAtLastReset-getTime()
-    def add(self,t):
-        """Add more time to the clock's 'start' time (t0).
-
-        Unlike the Clock.add() method this actually adds time to the apparent
-        current time. (It actually subtracts time from the stored t0)
-
-        e.g.::
-
-            timer = core.Clock()
-            timer.add(5)
-            while timer.getTime()>0:
-                #do something
-        """
-        self.timeAtLastReset += t
-
-def wait(secs, hogCPUperiod=0.2):
-    """Wait for a given time period.
-
-    If secs=10 and hogCPU=0.2 then for 9.8s python's time.sleep function will be used,
-    which is not especially precise, but allows the cpu to perform housekeeping. In
-    the final hogCPUperiod the more precise method of constantly polling the clock
-    is used for greater precision.
-
-    If you want to obtain key-presses during the wait, be sure to use pyglet and
-    to hogCPU for the entire time, and then call event.getKeys() after calling core.wait()
-
-    If you want to suppress checking for pyglet events during the wait, do this once:
-        core.checkPygletDuringWait = False
-    and from then on you can do
-        core.wait(sec)
-    This will preserve terminal-window focus during command line usage.
-    """
-    #initial relaxed period, using sleep (better for system resources etc)
-    if secs>hogCPUperiod:
-        time.sleep(secs-hogCPUperiod)
-        secs=hogCPUperiod#only this much is now left
-
-    #hog the cpu, checking time
-    t0=getTime()
-    while (getTime()-t0)<secs:
-        if not (havePyglet and checkPygletDuringWait):
-            continue
-        #let's see if pyglet collected any event in meantime
-        try:
-            # this takes focus away from command line terminal window:
-            pyglet.media.dispatch_events()#events for sounds/video should run independently of wait()
-            wins = pyglet.window.get_platform().get_default_display().get_windows()
-            for win in wins: win.dispatch_events()#pump events on pyglet windows
-        except:
-            pass #presumably not pyglet
 
 def shellCall(shellCmd, stdin='', stderr=False):
     """Call a single system command with arguments, return its stdout.
@@ -173,3 +72,63 @@ def shellCall(shellCmd, stdin='', stderr=False):
     else:
         return stdoutData.strip()
 
+class StaticPeriod(object):
+    """A class to help insert a timing period that includes code to be run.
+
+    Typical usage::
+
+        fixation.draw()
+        win.flip()
+        ISI = StaticPeriod(screenHz=60)
+        ISI.start(0.5) #start a period of 0.5s
+        stim.setImage('largeFile.bmp') #could take some time
+        ISI.complete() #finish the 0.5s, taking into account one 60Hz frame
+
+        stim.draw()
+        win.flip() #the period takes into account the next frame flip
+        #time should now be at exactly 0.5s later than when ISI.start() was called
+
+    """
+
+    #NB - this might seem to be more sensible in the clock.py module, but that creates a circular reference
+    # with the logging module.
+
+    def __init__(self, screenHz=None, win=None, name='StaticPeriod'):
+        """
+        :param screenHz: the frame rate of the monitor (leave as None if you don't want this accounted for)
+        :param name: if a visual.Window is given then StaticPeriod will also pause/restart frame interval recording
+        :param name: give this StaticPeriod a name for more informative logging messages
+        """
+        self.status=NOT_STARTED
+        self.countdown = CountdownTimer()
+        self.name = name
+        self.win = win
+        if screenHz == None:
+            self.frameTime = 0
+        else:
+            self.frameTime = 1.0/screenHz
+    def start(self, duration):
+        """Start the period. If this is called a second time, the timer will be reset and starts again
+        """
+        self.status = STARTED
+        self.countdown.reset(duration)
+        #turn off recording of frame intervals throughout static period
+        if self.win:
+            self.win.setRecordFrameIntervals(False)
+            self._winWasRecordingIntervals = self.win.recordFrameIntervals
+    def complete(self):
+        """Completes the period, using up whatever time is remaining with a call to wait()
+
+        :return: 1 for success, 0 for fail (the period overran)
+        """
+        self.status=FINISHED
+        timeRemaining = self.countdown.getTime()
+        if self.win:
+            self.win.setRecordFrameIntervals(self._winWasRecordingIntervals)
+        if timeRemaining<0:
+            import logging#we only do this if we need it - circular import
+            logging.warn('We overshot the intended duration of %s by %.4fs. The intervening code took too long to execute.' %(self.name, abs(timeRemaining)))
+            return 0
+        else:
+            wait(timeRemaining)
+            return 1

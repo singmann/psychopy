@@ -10,7 +10,7 @@ PsychoPy can be installed in three main ways:
 
 * **As libraries**: PsychoPy and the libraries it depends on can also be installed individually, providing greater flexibility. This option requires managing a python environment.
 
-* **As source code**: If you want to customize how PsychoPy works, consult the :ref:`developer's guide` for installation and work-flow suggestions. 
+* **As source code**: If you want to customize how PsychoPy works, consult the :ref:`developer's guide <developers>` for installation and work-flow suggestions. 
 
 When you start PsychoPy for the first time, a **Configuration Wizard** will retrieve and summarize key system settings. Based on the summary, you may want to adjust some preferences to better reflect your environment. In addition, this is a good time to unpack the Builder demos to a location of your choice. (See the Demo menu in the Builder.)
 
@@ -32,7 +32,7 @@ If you're thinking of buying a laptop for running experiments, **avoid the built
 Windows
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Once installed, you'll now find a link to the PsychoPy application in > Start > Progams > PsychoPy2. Click that and the Configuration Wizard should start. 
+Once installed, you'll now find a link to the PsychoPy application in > Start > Programs > PsychoPy2. Click that and the Configuration Wizard should start. 
 
 The wizard will try to make sure you have reasonably current drivers for your graphics card. You may be directed to download the latest drivers from the vendor, rather than using the pre-installed windows drivers. If necessary, get new drivers directly from the graphics card vendor; don't rely on Windows updates. The windows-supplied drivers are buggy and sometimes don't support OpenGL at all.
 
@@ -98,12 +98,12 @@ Essential packages
 If you want to install each library individually rather than use the simpler distributions of packages above then you can download the following. Make sure you get the correct version for your OS and your version of Python. easy_install will work for many of these, but some require compiling from source.
 
 * `python <http://www.python.org/download/>`_ (32-bit only, version 2.6 or 2.7; 2.5 might work, 3.x will not)
-* `avbin <http://code.google.com/p/avbin/>`_ (movies)
+* `avbin <http://code.google.com/p/avbin/>`_ (movies) On mac: 1) Download version 5 `from google <http://code.google.com/p/avbin/>`_ (not a higher version). 2) Start terminal, type `sudo mkdir -p /usr/local/lib` . 3) `cd` to the unpacked avbin directory, type `sh install.sh` . 4) Start or restart PsychoPy, and from PsychoPy's coder view shell, this should work: `from pyglet.media import avbin` . If you run a script and get an error saying `'NoneType' object has no attribute 'blit'`, it probably means you did not install version 5.
 * `setuptools <http://peak.telecommunity.com/DevCenter/setuptools>`_
 * `numpy <http://www.numpy.org/>`_ (version 0.9.6 or greater)
 * `scipy <http://www.scipy.org/Download>`_ (version 0.4.8 or greater)
 * `pyglet <http://www.pyglet.org>`_ (version 1.1.4, not version 1.2)
-* `wxPython <http://www.wxpython.org>`_ (version 2.8.10 ro 2.8.11, not 2.9)
+* `wxPython <http://www.wxpython.org>`_ (version 2.8.10 or 2.8.11, not 2.9)
 * `Python Imaging Library <http://www.pythonware.com/products/pil/>`_ (`sudo easy_install PIL`)
 * `matplotlib <http://matplotlib.sourceforge.net/>`_ (for plotting and fast polygon routines)
 * `lxml <http://lxml.de/>`_ (needed for loading/saving builder experiment files)
@@ -114,6 +114,12 @@ These packages are only needed for Windows:
 
 * `pywin32 <https://sourceforge.net/projects/pywin32/>`_
 * `winioport <http://www.geocities.com/dinceraydin/python/indexeng.html>`_ (to use the parallel port)
+* `inpout32 <http://logix4u.net/parallel-port/16-inpout32dll-for-windows-982000ntxp>`_ (an alternative method to using the parallel port on Windows)
+* `inpoutx64 <http://logix4u.net/parallel-port/26-inpoutx64dll-for-win-xp-64-bit>`_ (to use the parallel port on 64-bit Windows)
+
+These packages are only needed for Linux:
+
+* `pyparallel <http://pyserial.sourceforge.net/pyparallel.html>`_ (to use the parallel port)
 
 .. _suggestedPackages:
 

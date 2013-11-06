@@ -3,13 +3,16 @@ Various useful functions for creating filters and textures (e.g. for PatchStim)
 
 """
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 import numpy
 from numpy.fft import fft2, ifft2, fftshift, ifftshift
-import Image
 from psychopy import logging
+try:
+    from PIL import Image
+except ImportError:
+    import Image
 
 def makeGrating(res,
             ori=0.0,    #in degrees
@@ -105,7 +108,7 @@ def makeMask(matrixSize, shape='circle', radius=1.0, center=(0.0,0.0),
                 The proportion of the raisedCosine that is being blurred.
             range: 2x1 tuple or list (default=[-1,1])
                 The minimum and maximum value in the mask matrix
-            """
+    """
     rad = makeRadialMatrix(matrixSize, center, radius)
     if shape=='ramp':
             outArray=1-rad

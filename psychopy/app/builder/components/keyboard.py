@@ -1,5 +1,5 @@
 # Part of the PsychoPy library
-# Copyright (C) 2012 Jonathan Peirce
+# Copyright (C) 2013 Jonathan Peirce
 # Distributed under the terms of the GNU General Public License (GPL).
 
 from _base import *
@@ -157,7 +157,7 @@ class KeyboardComponent(BaseComponent):
 
         if storeCorr:
             buff.writeIndented("# was this 'correct'?\n" %self.params)
-            buff.writeIndented("if (%(name)s.keys == str(%(correctAns)s)): %(name)s.corr = 1\n" %(self.params))
+            buff.writeIndented("if (%(name)s.keys == str(%(correctAns)s)) or (%(name)s.keys == %(correctAns)s): %(name)s.corr = 1\n" %(self.params))
             buff.writeIndented("else: %(name)s.corr=0\n" %self.params)
 
         if forceEnd==True:
@@ -183,10 +183,11 @@ class KeyboardComponent(BaseComponent):
                 buff.writeIndented("   if str(%(correctAns)s).lower() == 'none': %(name)s.corr = 1  # correct non-response\n" %(self.params))
                 buff.writeIndented("   else: %(name)s.corr = 0  # failed to respond (incorrectly)\n" %(self.params))
             buff.writeIndented("# store data for %s (%s)\n" %(currLoop.params['name'], currLoop.type))
-            if currLoop.type=='StairHandler':
-                #data belongs to a StairHandler
+            if currLoop.type in ['StairHandler', 'MultiStairHandler']:
+                #data belongs to a Staircase-type of object
                 if self.params['storeCorrect'].val==True:
-                    buff.writeIndented("%s.addData(%s.corr)\n" %(currLoop.params['name'], name))
+                    buff.writeIndented("%s.addResponse(%s.corr)\n" %(currLoop.params['name'], name))
+                    buff.writeIndented("%s.addOtherData('%s.rt', %s.rt)\n" %(currLoop.params['name'], name, name))
             else:
                 #always add keys
                 buff.writeIndented("%s.addData('%s.keys',%s.keys)\n" \

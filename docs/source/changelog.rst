@@ -16,6 +16,116 @@ Changelog
 
 :blue:`Changes in blue typically indicate things that alter the PsychoPy behaviour in a way that could break compatibility. Be especially wary of those!`
 
+PsychoPy 1.79
+------------------------------
+
+* NEW: attributes for stimuli can now be updated using e.g. `stim.pos = newPos` rather than using `stim.setPos(newPos)` to make things more like standard Python (thanks Jonas Lindeløv). This version also involved some major restructuring behind the scenes that should not be visible to users (thanks Todd Jennings)
+* ADDED: Builder Components for
+    * ioLab Systems button-box; refactor PsychoPy's ioLabs code (Jeremy)
+    * Cedrus button-box (tested on RB730)
+    * parallel port output component
+* ADDED: option for sounds to `loop`
+* FIXED: bug when using ElementArrayStim with numpy 1.7.1. Most elements were receiving SF=0
+* FIXED: 'semi-automatic' calibration (thanks Flip Phillips)
+* FIXED: shut-down issues. Builder now remembers its last experiment and you don't get multiple messages about the scripts that have changed
+* FIXED: bugs with MultiStairHandler that were making it unusable (in code and Builder)
+* FIXED: lists of key presses can now be considered `correct` (Ian Hussey)
+* FIXED: certain further cases of bitmap images appearing desaturated
+* FIXED: mono sounds now duplicate to both channels correctly
+* changes to Standalone packages (require fetching the installer):
+    * pyFileSec for uploading files to server using encryption (this is Jeremy's module)
+    * pandas on win32 is now v1.3 (was already this version on OS X)
+    * pyxid now includes Jared's upstream bug-fix
+* FIXED: many user interface tweaks, documentation and help string corrections (Philip Wiesemann)
+* CHANGED: data curve fitting functions are now using scipy.optimise.curve_fit and should hopefully be more robust to local minima(?)
+
+PsychoPy 1.78
+------------------------------
+
+PsychoPy 1.78.01
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Released Aug 2013
+
+* FIXED: Image Components were showing up a pastel versions when no actual image was provided
+* FIXED: MultiStairHandler wasn't working on Builder, and had insufficient data outputs when using wide-text csv files
+* FIXED: loops couldn't be deleted from the Flow if their conditions file couldn't be found (e.g. had been moved)
+* FIXED: setting of color values was not honouring the autolog setting (was always logging)
+* FIXED: gui choice boxes now handle unicode in their options as well as ASCII strings (thanks Anne Peschel)
+* FIXED: Scaling bug for SMI eye-tracker in binocular mode (thanks Sol)
+* FIXED: Builder Code Components that were showing up in unreadable, single-line boxes
+* IMPROVED: All Builder Dialogs now appear close to the top of the screen (so they don't shoot off the bottom in most screens)
+
+PsychoPy 1.78.00
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Released Aug 2013
+
+* ADDED: option to preload during Builder scripts using :ref:`static`, which uses :class:`~psychopy.core.StaticPeriod` class
+* ADDED: Polygon Component to Builder for drawing regular polygons (including simple lines)
+* ADDED: TrialHander can now fetch previous trials as well as future ones (thanks Mike MacAskill)
+* ADDED: BufferImageStim accepts mask and pos params (thanks Jeremy)
+* ADDED: generated Sounds (not sound files) now use a Hamming window to get rid of sharp onset/offset noises (thanks Jeremy)
+* ADDED: microphone component able to play & identify a marker tone (for vocal RT), compute loudness, compression (Jeremy)
+* ADDED: sound files: lossless compress / uncompress (requires flac executable installed separately) (Jeremy)
+* ADDED: microphone compress() audio recordings; requires flac download (not packaged with PsychoPy)
+* ADDED: new preference `flac` = system path for flac, e.g. c:/Program Files (x86)/FLAC/flac.exe (not always needed)
+* FIXED: greyscale images were being distorted during display since 1.77.00
+* FIXED: reduced number of queries when closing down and provides filenames of changed files in msg (thanks Piot Iwaniuk)
+* FIXED: movieStim.contains() and .overlaps() can work, requires that the visual.Window has units of pix
+
+PsychoPy 1.77
+------------------------------
+
+PsychoPy 1.77.02
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+released July 2013
+
+* FIXED: problem with Builder Images appearing grey unless they were 'constant'. This is a bug that was introduced in 1.77.00 with the faster loading of images.
+* FIXED: having a monitors folder with a unicode character in the path doesn't break the app (thanks Sebastiaan Mathot)
+
+PsychoPy 1.77.01
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+released June 2013
+
+* Standalone package changes:
+    - fixed pytables version on Win32 (to be compatible with WinXP)
+    - pyo upgraded to 0.6.6 on OSX and Win32
+* FIXED: The recent files list in Builder now contains recent files! (Thanks Piotr Iwaniuk)
+* FIXED: Timing issue with LC Tech eye-tracker in iohub
+
+PsychoPy 1.77.00
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+released June 2013
+
+* ADDED: preview of Sol Simpson's **ioHub** for faster (asynchronous) polling of hardware including mouse, keyboard, eyetrackers and other devices. See iohub demos for example usage. This provides many advantages over previous event polling:
+    - asynchronous process allows constant polling (not tied to refresh rates) in a way that won't impact the rendering of your stimuli. It even runs on a separate CPU core if possible.
+    - provides up/down/duration for key presses
+    - provides unicode character (rather than simply key name for keyboard)
+    - provides a unified API for eyetracker classes
+    - provides async access to the parallel port
+    - provides an alternative data output format (using hdf5) particularly useful for high-output streaming data (e.g. eye-trackers)
+
+* DEPRECATED: opensslwrap will soon be replaced by pyFileSec, a much-improved version of the same package (= file-oriented encryption)
+* IMPROVED: substantially (~40%) faster loading of RGB images from disk (by using byte format rather than float). May also allow storing of more images on graphics card than previously
+* ADDED: :class:`AdvancedMicrophone` class to add and retrieve a high-frequency tone to indicate the start of recording (e.g., to allow accurate vocal RT estimation), with demo (Jeremy Gray)
+* REFACTORED: parallel port support. Support for Windows via inpout32/inpout64 and Linux via pyparallel added.  Existing API maintained for single port usage, but new PParallel classes added to provide more flexibility when dealing with multiple ports. see :ref:`parallel` (Thanks Mark Hymers)
+* ADDED: :class:`MovieStim` now updates its `status` attribute to FINISHED, in line with other stimuli
+* CHANGED: microphone default file names include milliseconds (to avoid two files with the same name)
+* ADDED: color-word speech-recognition demo (coder > input > speech_recognition.py)
+* ADDED: in Builder components dialog boxes, text that will be interpreted as code is displayed in monospace font
+* ADDED: remove and warn about trailing whitespace in Builder component values (but not Text fields)
+* ADDED: support for pyglet version 1.2 alpha (but 1.1.4 is still recommended - it appears to render faster)
+* ADDED: more sound.SoundPyo methods (get & set duration, volume, looping)
+* FIXED: event.Mouse() can obtain a default visual.Window(), if one has already been created
+* ADDED: Builder components generate a compile-time warning if a field's value looks dynamic but its updating is constant (Jeremy Gray)
+* ADDED: better simulated scanner-noise in launchScan (just for fun)
+* ADDED: RatingScale.getHistory() returns intermediate time-stamped ratings; allows "continuous" ratings
+* CHANGED: RatingScale.getRating() no longer returns False prior to an accepted rating (now returns the currently selected value)
+
 PsychoPy 1.76
 ------------------------------
 
@@ -24,8 +134,11 @@ PsychoPy 1.76.00
 
 The compatibility changes in this release below are likely to affect very few users
 
+* ADDED: :func:`Window.callOnFlip() <psychopy.visual.Window.callOnFlip>` function to allow arbitrary functions to be called, timed precisely to the point where the frame flip has occurred (see Coder Demos>Timing>callOnFlip)
+* FIXED: a scaling bug in RatingScale descriptions (Giuseppe Pagnoni)
+* ADDED: support for mirror-image text, and mirror-image BufferImageStim (Jeremy Gray)
 * ADDED: support for lower latency sound with the pyo library. For now pygame remains the default but this can be changed by setting the order in preferences>general>audio
-* CHANGED: PsychoPy Standalone is now being built using python 2.7.3 (rather than 2.6). Under OSX psignifit has been removed from this distribution, as have the libraries to create .mov files using Window.saveMovieFrames(). If you need those features then install the 1.75 Standalone and then update to 1.76 using the auto-update system.
+* :blue:`CHANGED: PsychoPy Standalone is now being built using python 2.7.3 (rather than 2.6). Under OSX psignifit has been removed from this distribution, as have the libraries to create .mov files using Window.saveMovieFrames(). If you need those features then install the 1.75 Standalone and then update to 1.76 using the auto-update system.`
 * ADDED: sound objects (either pygame or pyo) now support autologging
 * FIXED: a bug in the generation of the LMS color space conversion matrix. It seems nobody was actually using this for real, but if you were contact Jon for details!
 * CHANGED: various changes to RatingScale (thanks Henrik Singman):
@@ -137,7 +250,7 @@ Additional changes:
 * FIXED: missing parameter name in conditions file is detected, triggers more informative error message
 * ADDED: fORP: option asKeys to handle button presses as pyglet keyboard events (when using a serial port); faster getUniqueEvents()
 * ADDED: basic file encryption (beta) using RSA + AES-256; see API encryption for usage and caveats
-* ADDED: upload a file to a remote server over http (libs: web.upload) with coder demo, php scripts for server (contrib/http/*)
+* ADDED: upload a file to a remote server over http (libs: web.upload) with coder demo, php scripts for server (contrib/http/)
 * ADDED: Builder demo (dualRatingScales): show a stim, get two different ratings side by side [unpack the demos again]
 * ADDED: rating scale options: 'maxTime' to time-out, 'disappear' to hide after a rating; see new Builder demo
 * FIXED: rating scale bug: skipKeys was not handling 'tab' properly (no skip for tab-key, do skip for 't', 'a', or 'b')
@@ -249,7 +362,7 @@ PsychoPy 1.72.00
     - ShapeStim now has a size parameter that scales the locations of vertices
     - new classes; Rect, Line, Circle, Polygon
 
-* FIXED: error with DotStim when fieldSize was a tuple and fieldShape was 'sqr' 
+* FIXED: error with DotStim when fieldSize was a tuple and fieldShape was 'sqr'
 * FIXED: calibration plots in Monitor Center now resize and quit as expected
 * FIXED: conditions files can now have lists of numbers [0,0]
 * FIXED: buglet with flushing mouse events (thanks Sebastiaan Mathot)
